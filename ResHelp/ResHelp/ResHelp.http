@@ -1,0 +1,6 @@
+@ResHelp_HostAddress = http://localhost:5229
+
+GET {{ResHelp_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
