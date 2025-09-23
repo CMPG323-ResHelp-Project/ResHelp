@@ -30,7 +30,7 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
     setError(null);
 
     if (!userType) {
-      setError("Please select your role before signing in.");
+      alert("Please select your role before signing in.");
       return;
     }
 
@@ -41,7 +41,6 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
       const user = userCredential.user;
       const idToken = await user.getIdToken();
 
-      // Convert userType to lowercase here
       const loginUserType = userType.toLowerCase();
 
       const response = await fetch("http://localhost:5229/Login", {
@@ -49,7 +48,7 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           email: user.email, 
-          userType: loginUserType, // Send the lowercase version
+          userType: loginUserType, 
           idToken: idToken 
         })
       });
@@ -73,7 +72,7 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
           router.push("/manager/dashboard");
           break;
         default:
-          setError("User role not recognized.");
+          alert("User role not recognized.");
           break;
       }
 
@@ -81,14 +80,14 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
       console.error("Login error:", err);
       if (err.code) {
         if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
-          setError("Incorrect email, password, or user role.");
+          alert("Incorrect email, password, or user role.");
         } else if (err.code === "auth/user-not-found") {
-          setError("No user found with this email.");
+          alert("No user found with this email.");
         } else {
-          setError(err.message);
+          alert(err.message);
         }
       } else {
-        setError(err.message);
+        alert(err.message);
       }
     } finally {
       setIsLoading(false);
@@ -171,5 +170,5 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
