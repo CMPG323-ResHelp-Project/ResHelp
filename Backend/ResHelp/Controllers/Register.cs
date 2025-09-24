@@ -2,6 +2,8 @@ using FirebaseAdmin.Auth;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Mvc;
 using ResHelp.Models;
+using System.Net.Mail;
+using System.Net;
 
 namespace ResHelp.Controllers
 {
@@ -21,6 +23,7 @@ namespace ResHelp.Controllers
         {
             try
             {
+                // 1️⃣ Create Firebase user
                 var firebaseUser = await FirebaseAuth.DefaultInstance.CreateUserAsync(new UserRecordArgs
                 {
                     Email = user.Email,
@@ -28,6 +31,7 @@ namespace ResHelp.Controllers
                     DisplayName = user.Name
                 });
 
+                // 2️⃣ Store user in Firestore
                 var userRef = _firestoreDb.Collection("users").Document(firebaseUser.Uid);
                 await userRef.SetAsync(new
                 {
@@ -40,7 +44,28 @@ namespace ResHelp.Controllers
                     Address = user.Address
                 });
 
-                return Ok(new { message = "User registered successfully", uid = firebaseUser.Uid });
+                // 3️⃣ Generate email verification link
+                var verificationLink = await FirebaseAuth.DefaultInstance.GenerateEmailVerificationLinkAsync(user.Email);
+
+                // 4️⃣ Send verification email automatically via Gmail
+                using (var client = new SmtpClient("smtp.gmail.com", 587))
+                {
+                    client.Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos");
+                    client.EnableSsl = true;
+
+                    var mailMessage = new MailMessage
+                    {
+                        From = new MailAddress("muhleusurp@gmail.com", "ResHelp"),
+                        Subject = "Verify your email",
+                        Body = $"Hello {user.Name},<br/><br/>Please verify your email by clicking the link below:<br/><a href='{verificationLink}'>Verify Email</a><br/><br/>Thank you!",
+                        IsBodyHtml = true
+                    };
+                    mailMessage.To.Add(user.Email);
+
+                    await client.SendMailAsync(mailMessage);
+                }
+
+                return Ok(new { message = "User registered successfully. A verification email has been sent.", uid = firebaseUser.Uid });
             }
             catch (Exception ex)
             {

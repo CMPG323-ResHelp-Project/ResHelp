@@ -27,22 +27,29 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null);
-
+    setError(null)
+  
     if (!userType) {
       alert("Please select your role before signing in.");
       return;
     }
-
-    setIsLoading(true);
-
+  
+    setIsLoading(true)
+  
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      const idToken = await user.getIdToken();
-
-      const loginUserType = userType.toLowerCase();
-
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
+  
+      // ✅ Check if email is verified
+      if (!user.emailVerified) {
+        setError("Please verify your email before logging in.")
+        setIsLoading(false)
+        return
+      }
+  
+      const idToken = await user.getIdToken()
+      const loginUserType = userType.toLowerCase()
+  
       const response = await fetch("http://localhost:5229/Login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -51,48 +58,37 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
           userType: loginUserType, 
           idToken: idToken 
         })
-      });
-
+      })
+  
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Login failed on the server.");
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Login failed on the server.")
       }
-
-      const data = await response.json();
-      console.log("Backend response:", data);
-
+  
+      const data = await response.json()
+      console.log("Backend response:", data)
+  
       switch (data.userType) {
         case "student":
-          router.push("/student/dashboard");
-          break;
+          router.push("/student/dashboard")
+          break
         case "staff":
-          router.push("/staff/dashboard");
-          break;
+          router.push("/staff/dashboard")
+          break
         case "manager":
-          router.push("/manager/dashboard");
-          break;
+          router.push("/manager/dashboard")
+          break
         default:
-          alert("User role not recognized.");
-          break;
+          alert("User role not recognized.")
+          break
       }
-
     } catch (err: any) {
-      console.error("Login error:", err);
-      if (err.code) {
-        if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
-          alert("Incorrect email, password, or user role.");
-        } else if (err.code === "auth/user-not-found") {
-          alert("No user found with this email.");
-        } else {
-          alert(err.message);
-        }
-      } else {
-        alert(err.message);
-      }
+      console.error("Login error:", err)
+      alert(err.message)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
