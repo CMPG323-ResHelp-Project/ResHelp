@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ResHelp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+f8c2a5927ae61390435882d2b14fdb74c0629b65")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+412cc5e77a75a7cd12a3d2f94baab0148607cacb")]
 [assembly: System.Reflection.AssemblyProductAttribute("ResHelp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ResHelp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
