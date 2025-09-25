@@ -7,7 +7,8 @@ using Microsoft.AspNetCore.Mvc;
 var builder = WebApplication.CreateBuilder(args);
 
 // === Firebase & Firestore setup ===
-string serviceAccountPath = @"C:\Users\ASUS\Downloads\ResHelp\Backend\ResHelp\reshelp-ba48b-firebase-adminsdk-fbsvc-68be648d8b.json";
+string fileName = "reshelp-ba48b-firebase-adminsdk-fbsvc-68be648d8b.json";
+string serviceAccountPath = Path.Combine(AppContext.BaseDirectory, fileName);
 
 // Initialize Firebase Admin
 var firebaseApp = FirebaseApp.Create(new AppOptions
