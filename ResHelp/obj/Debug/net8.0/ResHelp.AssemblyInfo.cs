@@ -14,7 +14,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("ResHelp")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+ee954aa72bc14a20ac71f760f44b29e1d85526cb")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+3c00745fdbb1f64f0443cd79e1ebbbc655f8cfca")]
 [assembly: System.Reflection.AssemblyProductAttribute("ResHelp")]
 [assembly: System.Reflection.AssemblyTitleAttribute("ResHelp")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

@@ -1,0 +1,9 @@
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\ResHelp.csproj.AssemblyReference.cache
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\rpswa.dswa.cache.json
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\ResHelp.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\ResHelp.AssemblyInfoInputs.cache
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\ResHelp.AssemblyInfo.cs
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\ResHelp.csproj.CoreCompileInputs.cache
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\ResHelp.MvcApplicationPartsAssemblyInfo.cs
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\ResHelp.MvcApplicationPartsAssemblyInfo.cache
+C:\Users\nicna\OneDrive\Documents\ResHelp\ResHelp\obj\Debug\net8.0\ResHelp.sourcelink.json
