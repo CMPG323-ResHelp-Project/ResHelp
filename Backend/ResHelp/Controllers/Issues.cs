@@ -4,6 +4,8 @@ using Microsoft.AspNetCore.Mvc;
 using ResHelp.Models;
 using System;
 using System.Threading.Tasks;
+using System.Net;
+using System.Net.Mail;
 using System.Collections.Generic; // Added for Dictionary use
 
 namespace ResHelp.Controllers
@@ -19,57 +21,91 @@ namespace ResHelp.Controllers
             _firestoreDb = firestoreDb;
         }
 
-        [HttpPost("report")]
-        public async Task<IActionResult> ReportIssue(
-            [FromBody] IssueDto issue,
-            [FromHeader(Name = "Authorization")] string authorization)
+     [HttpPost("report")]
+public async Task<IActionResult> ReportIssue(
+    [FromBody] IssueDto issue,
+    [FromHeader(Name = "Authorization")] string authorization)
+{
+    if (issue == null)
+        return BadRequest(new { error = "Issue data is required." });
+
+    if (string.IsNullOrEmpty(authorization))
+        return Unauthorized(new { error = "Authorization header is missing." });
+
+    try
+    {
+        var idToken = authorization.Replace("Bearer ", "").Trim();
+        var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+        string uid = decodedToken.Uid;
+
+        // Prepare Firestore document with additional backend fields
+        var issueDoc = new
         {
-            if (issue == null)
-                return BadRequest(new { error = "Issue data is required." });
+            Id = Guid.NewGuid().ToString(),
+            Title = issue.Title,
+            Description = issue.Description,
+            Category = issue.Category,
+            Priority = issue.Priority,
+            Location = issue.Location,
+            ImageUrl = issue.ImageUrl,
+            IsUrgent = issue.IsUrgent,
+            ReporterEmail = issue.ReporterEmail,
+            ReportedBy = uid,
+            Status = "Pending",
+            ReportedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+            Rating = (int?)null
+        };
 
-            if (string.IsNullOrEmpty(authorization))
-                return Unauthorized(new { error = "Authorization header is missing." });
+        // Save in Firestore
+        var docRef = _firestoreDb.Collection("issues").Document(issueDoc.Id);
+        await docRef.SetAsync(issueDoc);
 
-            try
+        // 🆕 Send confirmation email to the reporter
+        using (var client = new SmtpClient("smtp.gmail.com", 587))
+        {
+            client.Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos"); // ⚠️ move to secrets/config
+            client.EnableSsl = true;
+
+            var mailMessage = new MailMessage
             {
-                var idToken = authorization.Replace("Bearer ", "").Trim();
-                var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
-                string uid = decodedToken.Uid;
+                From = new MailAddress("muhleusurp@gmail.com", "ResHelp"),
+                Subject = "Issue Report Confirmation",
+                Body = $@"
+                    Hello,<br/><br/>
+                    You have successfully reported a new issue.<br/><br/>
+                    <b>Title:</b> {issue.Title}<br/>
+                    <b>Description:</b> {issue.Description}<br/>
+                    <b>Category:</b> {issue.Category}<br/>
+                    <b>Priority:</b> {issue.Priority}<br/>
+                    <b>Location:</b> {issue.Location}<br/>
+                    <b>Urgent:</b> {(issue.IsUrgent ? "Yes" : "No")}<br/>
+                    <b>Reported At:</b> {DateTime.UtcNow}<br/><br/>
+                    We will review your issue and update you on its progress.<br/><br/>
+                    Thank you,<br/>
+                    ResHelp Team
+                ",
+                IsBodyHtml = true
+            };
 
-                // Prepare Firestore document with additional backend fields
-                var issueDoc = new
-                {
-                    Id = Guid.NewGuid().ToString(),      // Backend-generated unique ID
-                    Title = issue.Title,
-                    Description = issue.Description,
-                    Category = issue.Category,
-                    Priority = issue.Priority,
-                    Location = issue.Location,
-                    ImageUrl = issue.ImageUrl,
-                    IsUrgent = issue.IsUrgent,
-                    ReporterEmail = issue.ReporterEmail,
-                    ReportedBy = uid,                    // Firebase UID
-                    Status = "Pending",
-                    ReportedAt = DateTime.UtcNow,
-                    UpdatedAt = DateTime.UtcNow,
-                    Rating = (int?)null 
-                };
+            // Send to reporter’s email
+            mailMessage.To.Add(issue.ReporterEmail);
 
-                // Save in Firestore
-                var docRef = _firestoreDb.Collection("issues").Document(issueDoc.Id);
-                await docRef.SetAsync(issueDoc);
-
-                return Ok(new { message = "Issue reported successfully.", id = issueDoc.Id });
-            }
-            catch (FirebaseAuthException ex)
-            {
-                return Unauthorized(new { error = "Invalid token: " + ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = ex.Message });
-            }
+            await client.SendMailAsync(mailMessage);
         }
+
+        return Ok(new { message = "Issue reported successfully. Confirmation email sent.", id = issueDoc.Id });
+    }
+    catch (FirebaseAuthException ex)
+    {
+        return Unauthorized(new { error = "Invalid token: " + ex.Message });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { error = ex.Message });
+    }
+}
+
 
       [HttpGet("all")]
         public async Task<IActionResult> GetAllIssues([FromHeader(Name = "Authorization")] string authorization)
@@ -232,8 +268,10 @@ namespace ResHelp.Controllers
                     return Forbid();
 
                 // Only allow rating if status is Resolved
-                if (status != "Resolved")
-                    return BadRequest(new { error = "Only resolved issues can be rated." });
+              // Only allow rating if status is Resolved (case-insensitive)
+if ((status ?? "").ToLower() != "resolved")
+    return BadRequest(new { error = "Only resolved issues can be rated." });
+
 
                 // Update the rating
                 var updates = new Dictionary<string, object>
@@ -255,5 +293,54 @@ namespace ResHelp.Controllers
                 return StatusCode(500, new { error = ex.Message });
             }
         }
+
+        [HttpPut("{id}/cancel")]
+public async Task<IActionResult> CancelIssue(
+    string id,
+    [FromHeader(Name = "Authorization")] string authorization)
+{
+    if (string.IsNullOrEmpty(authorization))
+        return Unauthorized(new { error = "Authorization header is missing." });
+
+    try
+    {
+        var idToken = authorization.Replace("Bearer ", "").Trim();
+        var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+        string uid = decodedToken.Uid;
+        string email = decodedToken.Claims["email"]?.ToString() ?? "";
+
+        var docRef = _firestoreDb.Collection("issues").Document(id);
+        var snapshot = await docRef.GetSnapshotAsync();
+
+        if (!snapshot.Exists)
+            return NotFound(new { error = $"Issue with ID {id} not found." });
+
+        var existingIssue = snapshot.ToDictionary();
+        string reportedByUid = existingIssue.ContainsKey("ReportedBy") ? existingIssue["ReportedBy"]?.ToString() : null;
+
+        // Check ownership
+        if (reportedByUid != uid)
+            return Forbid();
+
+        // ✅ Update the status to Cancelled
+        await docRef.UpdateAsync(new Dictionary<string, object>
+        {
+            { "Status", "Cancelled" },
+            { "UpdatedAt", DateTime.UtcNow }
+        });
+
+        return Ok(new { message = "Issue cancelled successfully.", id = id, status = "Cancelled" });
+    }
+    catch (FirebaseAuthException ex)
+    {
+        return Unauthorized(new { error = "Invalid token: " + ex.Message });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { error = ex.Message });
+    }
+}
+
+
     }
 }

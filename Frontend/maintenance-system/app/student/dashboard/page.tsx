@@ -229,33 +229,52 @@ export default function MyIssuesDashboard() {
     const [historySort, setHistorySort] = useState<"UpdatedAt_desc" | "UpdatedAt_asc">("UpdatedAt_desc");
     const [historyStatusFilter, setHistoryStatusFilter] = useState<string | null>(null);
 
-     // 🔑 ADD submitRating HERE
-     const submitRating = async (issueId: string, rating: number) => {
+    const submitRating = async (issueId: string, rating: number) => {
       try {
-          const { auth } = await import("@/lib/firebase")
-          const user = auth.currentUser
-          if (!user) throw new Error("User not logged in.")
-          const idToken = await user.getIdToken()
-
-          const response = await fetch(`http://localhost:5229/Issues/${issueId}/rate`, {
-              method: "PUT",
-              headers: {
-                  "Authorization": `Bearer ${idToken}`,
-                  "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ rating })
-          });
-
-          if (!response.ok) {
-              const errData = await response.json()
-              throw new Error(errData.error || "Failed to submit rating")
-          }
-
-          fetchIssues(); // refresh to show updated rating
+        // 🆕 Ask user to confirm
+        const confirmed = window.confirm(`Are you sure you want to rate this issue with ${rating} star(s)?`)
+        if (!confirmed) return // 🚫 user cancelled → don’t submit
+    
+        const { auth } = await import("@/lib/firebase")
+        const user = auth.currentUser
+        if (!user) throw new Error("User not logged in.")
+        const idToken = await user.getIdToken()
+    
+        const response = await fetch(`http://localhost:5229/Issues/${issueId}/rate`, {
+          method: "POST", // ⚠️ match backend
+          headers: {
+            "Authorization": `Bearer ${idToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ rating })
+        })
+    
+        const responseText = await response.text()
+    
+        let data: any
+        try {
+          data = JSON.parse(responseText)
+        } catch {
+          console.error("Non-JSON response:", responseText)
+          throw new Error(`Server returned status ${response.status}.`)
+        }
+    
+        if (!response.ok) {
+          throw new Error(data.error || data.message || "Failed to submit rating")
+        }
+    
+        // 🆕 Show success message instead of just refreshing
+        setIssueMessage(`Issue #${issueId.slice(0, 8)} rated ${rating} star(s).`)
+        setTimeout(() => setIssueMessage(null), 5000)
+    
+        fetchIssues() // refresh to show updated rating
+    
       } catch (err: any) {
-          setError(err.message || "Failed to submit rating")
+        setError(err.message || "Failed to submit rating")
       }
-  }
+    }
+    
+    
     // Status & Priority helpers
     const getStatusIcon = (status: string) => {
         switch (status.toLowerCase()) {
@@ -441,7 +460,9 @@ export default function MyIssuesDashboard() {
                 throw new Error(errorData.error || `Failed to cancel issue: ${response.status}`);
             }
 
-            alert(`Issue #${issueId.slice(0, 8)} has been cancelled.`);
+             // ✅ Show success message in UI, not alert
+    setIssueMessage(`Issue #${issueId.slice(0, 8)} cancelled successfully.`)
+    setTimeout(() => setIssueMessage(null), 5000)
             fetchIssues(); // Refresh the list
         } catch (err: any) {
             setError(err.message || "An error occurred while cancelling the issue.");
@@ -776,4 +797,3 @@ export default function MyIssuesDashboard() {
         </div>
     )
 }
-
