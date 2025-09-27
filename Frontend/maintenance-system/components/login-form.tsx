@@ -37,10 +37,32 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
     setIsLoading(true)
   
     try {
+      if (userType === "manager") {
+        // 🔑 For managers: bypass Firebase
+        const response = await fetch("http://localhost:5229/Login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            userType: "manager"
+          })
+        })
+  
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Manager login failed.")
+        }
+  
+        const data = await response.json()
+        router.push("/manager/dashboard")
+        return
+      }
+  
+      // 🔑 Normal Firebase flow for students/staff
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
   
-      // ✅ Check if email is verified
       if (!user.emailVerified) {
         setError("Please verify your email before logging in.")
         setIsLoading(false)
@@ -53,10 +75,10 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
       const response = await fetch("http://localhost:5229/Login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          email: user.email, 
-          userType: loginUserType, 
-          idToken: idToken 
+        body: JSON.stringify({
+          email: user.email,
+          userType: loginUserType,
+          idToken: idToken
         })
       })
   
@@ -66,17 +88,13 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
       }
   
       const data = await response.json()
-      console.log("Backend response:", data)
   
-      switch (data.userType) {
+      switch (data.userType.toLowerCase()) {
         case "student":
           router.push("/student/dashboard")
           break
         case "staff":
           router.push("/staff/dashboard")
-          break
-        case "manager":
-          router.push("/manager/dashboard")
           break
         default:
           alert("User role not recognized.")

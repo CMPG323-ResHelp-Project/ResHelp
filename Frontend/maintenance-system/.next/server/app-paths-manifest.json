@@ -1,6 +1,6 @@
 {
   "/page": "app/page.js",
-  "/student/dashboard/page": "app/student/dashboard/page.js",
-  "/student/report/page": "app/student/report/page.js",
-  "/student/profile/page": "app/student/profile/page.js"
+  "/manager/dashboard/page": "app/manager/dashboard/page.js",
+  "/manager/staff/page": "app/manager/staff/page.js",
+  "/manager/students/page": "app/manager/students/page.js"
 }

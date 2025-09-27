@@ -25,7 +25,6 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
   }
 
   const handleProfileClick = () => {
-    // Navigate to the profile page based on the user's role
     router.push(`/${userType}/profile`)
   }
 
@@ -45,6 +44,9 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
         return [
           { label: "Dashboard", href: "/manager/dashboard", icon: Home },
           { label: "Analytics", href: "/manager/analytics", icon: Settings },
+          { label: "Students", href: "/manager/students", icon: User },
+          { label: "Staff", href: "/manager/staff", icon: User },
+          { label: "Issues", href: "/manager/issues", icon: Settings },
         ]
       default:
         return []
@@ -77,16 +79,18 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                 </Button>
               )
             })}
-            
-            {/* Profile Button - no dropdown */}
-            <Button
-              variant="ghost"
-              onClick={handleProfileClick}
-              className="flex items-center space-x-2"
-            >
-              <User className="h-4 w-4" />
-              <span>Profile</span>
-            </Button>
+
+            {/* Profile Button - only for student/staff */}
+            {userType !== "manager" && (
+              <Button
+                variant="ghost"
+                onClick={handleProfileClick}
+                className="flex items-center space-x-2"
+              >
+                <User className="h-4 w-4" />
+                <span>Profile</span>
+              </Button>
+            )}
           </div>
         </div>
 
@@ -135,25 +139,25 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                     </Button>
                   )
                 })}
-                {/* Profile Button in mobile sidebar */}
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    handleProfileClick()
-                    setIsSidebarOpen(false)
-                  }}
-                  className="flex justify-start items-center space-x-2 w-full"
-                >
-                  <User className="h-4 w-4" />
-                  <span>Profile</span>
-                </Button>
-
-                <div className="border-t border-border mt-4 pt-4">
-                   {userName && <div className="font-semibold">{userName}</div>}
-                  {userEmail && <div className="text-sm text-gray-500 truncate">{userEmail}</div>}
+                {/* Profile Button - only for student/staff */}
+                {userType !== "manager" && (
                   <Button
                     variant="ghost"
-                    onClick={handleLogout}
+                    onClick={() => {
+                      handleProfileClick()
+                      setIsSidebarOpen(false)
+                    }}
+                    className="flex justify-start items-center space-x-2 w-full"
+                  >
+                    <User className="h-4 w-4" />
+                    <span>Profile</span>
+                  </Button>
+                )}
+
+                <div className="border-t border-border mt-4 pt-4">
+                  {userName && <div className="font-semibold">{userName}</div>}
+                  {userEmail && <div className="text-sm text-gray-500 truncate">{userEmail}</div>}
+                  <Button
                     className="flex justify-start items-center space-x-2 w-full mt-2"
                   >
                     <LogOut className="h-4 w-4" />

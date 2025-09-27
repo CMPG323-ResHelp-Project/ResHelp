@@ -235,7 +235,6 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
                     <SelectContent>
                       <SelectItem value="student">Student</SelectItem>
                       <SelectItem value="staff">Support Staff</SelectItem>
-                      <SelectItem value="manager">Residence Manager</SelectItem>
                     </SelectContent>
                   </Select>
                   {userTypeError && <p className="text-red-500 text-sm mt-1">{userTypeError}</p>}
