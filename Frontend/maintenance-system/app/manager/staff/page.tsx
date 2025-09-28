@@ -203,38 +203,20 @@ const [staffToDelete, setStaffToDelete] = useState<Staff | null>(null);
   
     setErrorMessage(null);
     setConfirmationMessage(null);
-    setIsEditLoading(true);
+    setIsEditLoading(true); // START loading
   
     try {
-      // ✅ Get Firebase ID Token from the logged-in manager
-      const user = auth.currentUser;
-      const idToken = user ? await user.getIdToken() : null;
-      if (!user || !idToken) throw new Error("Manager not authenticated or token missing.");
+      // Build payload: only include fields that have values
+      const payload: any = { email: editingStaff.email }; // used to locate staff
+      if (formData.name) payload.name = formData.name;
+      if (formData.surname) payload.surname = formData.surname;
+      if (formData.phone) payload.phone = formData.phone;
+      if (formData.maintenanceType) payload.maintenanceType = formData.maintenanceType;
   
-      // Validate updatable fields only (ignore email)
-      const validationError = validateFormData(formData);
-      if (validationError) {
-        setErrorMessage(validationError);
-        setIsEditLoading(false);
-        return;
-      }
-  
-      // ✅ Build payload (no email update, only allowed fields)
-      const payload = {
-        name: formData.name,
-        surname: formData.surname,
-        phone: formData.phone,
-        maintenanceType: formData.maintenanceType,
-        email: editingStaff.email,
-      };
-  
-      // ✅ Call backend
+      // Call backend (no auth needed)
       const response = await fetch("http://localhost:5229/UserUpdate/staff", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${idToken}`,
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
   
@@ -243,11 +225,14 @@ const [staffToDelete, setStaffToDelete] = useState<Staff | null>(null);
         throw new Error(errorBody.error || `Server returned status: ${response.status}`);
       }
   
-      // ✅ Update local state after backend success
-      const updatedStaff: Staff = { ...editingStaff, ...formData };
-      setStaff((prev) => prev.map((s) => (s.id === updatedStaff.id ? updatedStaff : s)));
+      // 🔄 Reload full staff list from backend after update
+      const reloadResponse = await fetch("http://localhost:5229/UserUpdate/staff/all", {
+        method: "GET",
+      });
+      const updatedStaff: Staff[] = await reloadResponse.json();
+      setStaff(updatedStaff);
   
-      // ✅ Show confirmation and close dialog
+      // Reset form and show confirmation
       setEditingStaff(null);
       setFormData({ name: "", surname: "", email: "", phone: "", maintenanceType: "" });
       setConfirmationMessage("Staff updated successfully!");
@@ -255,12 +240,12 @@ const [staffToDelete, setStaffToDelete] = useState<Staff | null>(null);
   
     } catch (err: any) {
       console.error("API Error:", err);
-      const message = err.message.includes("Failed to fetch")
-        ? "Failed to fetch. Check if the API is running, the URL is correct, and you have a valid Firebase token."
-        : err.message;
+      const message = (err as Error).message.includes("Failed to fetch")
+        ? "Failed to fetch. Check if the C# API is running and the URL is correct."
+        : (err as Error).message;
       setErrorMessage(message);
     } finally {
-      setIsEditLoading(false);
+      setIsEditLoading(false); // STOP loading
     }
   };
   

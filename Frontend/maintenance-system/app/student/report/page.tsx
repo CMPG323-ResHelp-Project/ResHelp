@@ -87,71 +87,57 @@ export default function ReportIssue() {
     setIsSubmitting(true)
 
     try {
-      // Get currently logged in user from Firebase
-      // Dynamic import for client use (replace with your actual auth source if different)
-      const { auth } = await import("@/lib/firebase") 
-      const user = auth.currentUser
-      
-      if (!user) {
-        throw new Error("User not logged in. Please sign in again.")
-      }
-      
-      const idToken = await user.getIdToken()
-
-      // The corrected JSON payload
+      const { auth } = await import("@/lib/firebase");
+      const user = auth.currentUser;
+      if (!user) throw new Error("User not logged in");
+  
+      const idToken = await user.getIdToken();
+  
+// Get the display name and split it
+const fullName = user.displayName || "Unknown User";
+const nameParts = fullName.trim().split(" ");
+const firstName = nameParts[0];
+const lastName = nameParts.slice(1).join(" ");
+  
       const payload = {
           title,
           description,
           category,
           priority,
           location,
-          isUrgent, 
-          imageUrl: "", // Assuming image upload is handled separately or is empty string
-          
-          // Match the new C# DTO field
-          reporterEmail: user.email || "unknown@reshelp.com", 
-          
-          // DO NOT SEND THESE FIELDS: The C# controller (Issues.cs) sets them.
-          // Id, Status, ReportedBy, ReportedAt, UpdatedAt
-      }
-
-      // Send issue to backend
+          isUrgent,
+          imageUrl: "",
+          name: firstName,
+          surname: lastName,
+          reporterEmail: user.email || "unknown@reshelp.com",
+      };
+  
       const response = await fetch("http://localhost:5229/Issues/report", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${idToken}`, 
-        },
-        body: JSON.stringify(payload),
-      })
-
-      const responseText = await response.text() // Read as text first for better error logging
-      
+          method: "POST",
+          headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${idToken}`,
+          },
+          body: JSON.stringify(payload),
+      });
+  
+      const responseText = await response.text();
       if (!response.ok) {
-        // Attempt to parse JSON if available, otherwise use raw text
-        let data: { error?: string, message?: string }
-        try {
-            data = JSON.parse(responseText)
-        } catch {
-            // Fallback for non-JSON errors (like 500 HTML page)
-            console.error("Non-JSON Server Error Response:", responseText)
-            throw new Error(`Server returned status ${response.status}. Details: ${responseText.substring(0, 100)}...`)
-        }
-
-        console.error("Server responded with error:", data.error)
-        throw new Error(data.error || data.message || "Failed to report issue with an unexpected response.")
+          let data: { error?: string; message?: string } = {};
+          try { data = JSON.parse(responseText); } catch {}
+          throw new Error(data.error || data.message || responseText);
       }
-
-      // Successful response
-      setMessage("Issue reported successfully! Redirecting to dashboard...")
-      setTimeout(() => router.push("/student/dashboard"), 2000)
-
-    } catch (err: any) {
-      console.error("Error reporting issue:", err)
-      setError(err.message || "An unknown error occurred during submission.")
-    } finally {
-      setIsSubmitting(false)
-    }
+  
+      setMessage("Issue reported successfully! Redirecting to dashboard...");
+      setTimeout(() => router.push("/student/dashboard"), 2000);
+  
+  } catch (err: any) {
+      console.error("Error reporting issue:", err);
+      setError(err.message || "An unknown error occurred during submission.");
+  } finally {
+      setIsSubmitting(false);
+  }
+  
   }
   
 

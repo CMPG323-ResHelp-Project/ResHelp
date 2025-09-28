@@ -88,67 +88,48 @@ namespace ResHelp.Controllers
                 return StatusCode(500, new { error = "Internal server error: " + ex.Message });
             }
         }
-  [HttpPost("staff")]
-public async Task<IActionResult> UpdateStaff([FromBody] UserDto staffUpdate, [FromHeader(Name = "Authorization")] string authorization)
-{
-    if (staffUpdate == null)
-        return BadRequest(new { error = "Request body is empty." });
+        
+   [HttpPost("staff")]
+        public async Task<IActionResult> UpdateStaff([FromBody] UserDto staffUpdate)
+        {
+            if (staffUpdate == null)
+                return BadRequest(new { error = "Request body is empty." });
 
-    if (string.IsNullOrEmpty(authorization))
-        return Unauthorized(new { error = "Authorization header is missing." });
+            if (string.IsNullOrEmpty(staffUpdate.Email))
+                return BadRequest(new { error = "Staff email must be provided." });
 
-    try
-    {
-        // 1. Authenticate the user making the request
-        var idToken = authorization.Replace("Bearer ", "").Trim();
-        var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+            try
+            {
+                // Locate the staff document by email
+                var usersCollection = _firestoreDb.Collection("users");
+                var staffSnapshot = await usersCollection.WhereEqualTo("Email", staffUpdate.Email).GetSnapshotAsync();
 
-        if (!decodedToken.Claims.TryGetValue("email", out object? userEmailObj) || userEmailObj == null)
-            return Unauthorized(new { error = "Token does not contain an email." });
+                if (staffSnapshot.Count == 0)
+                    return NotFound(new { error = $"Staff with email '{staffUpdate.Email}' not found." });
 
-        string userEmail = userEmailObj.ToString()!;
+                var staffDoc = staffSnapshot.Documents[0];
+                var updateData = new Dictionary<string, object>();
 
-        // 2. Ensure staff email is provided
-        if (string.IsNullOrEmpty(staffUpdate.Email))
-            return BadRequest(new { error = "Staff email must be provided." });
+                // Add only fields that are provided
+                if (!string.IsNullOrEmpty(staffUpdate.Name)) updateData["Name"] = staffUpdate.Name;
+                if (!string.IsNullOrEmpty(staffUpdate.Surname)) updateData["Surname"] = staffUpdate.Surname;
+                if (!string.IsNullOrEmpty(staffUpdate.Phone)) updateData["Phone"] = staffUpdate.Phone;
+                if (!string.IsNullOrEmpty(staffUpdate.Address)) updateData["Address"] = staffUpdate.Address;
+                if (!string.IsNullOrEmpty(staffUpdate.MaintenanceType)) updateData["MaintenanceType"] = staffUpdate.MaintenanceType;
 
-        // 3. Locate the staff document by email
-        var usersCollection = _firestoreDb.Collection("users");
-        var staffSnapshot = await usersCollection.WhereEqualTo("Email", staffUpdate.Email).GetSnapshotAsync();
+                if (updateData.Count == 0)
+                    return BadRequest(new { error = "No fields provided to update." });
 
-        if (staffSnapshot.Count == 0)
-            return NotFound(new { error = $"Staff with email '{staffUpdate.Email}' not found." });
+                // Apply updates
+                await staffDoc.Reference.UpdateAsync(updateData);
 
-        var staffDoc = staffSnapshot.Documents[0];
-        var updateData = new Dictionary<string, object>();
-
-        // Allowed fields for staff update
-        if (!string.IsNullOrEmpty(staffUpdate.Name)) updateData["Name"] = staffUpdate.Name;
-        if (!string.IsNullOrEmpty(staffUpdate.Surname)) updateData["Surname"] = staffUpdate.Surname;
-        if (!string.IsNullOrEmpty(staffUpdate.Phone)) updateData["Phone"] = staffUpdate.Phone;
-        if (!string.IsNullOrEmpty(staffUpdate.Address)) updateData["Address"] = staffUpdate.Address;
-        if (!string.IsNullOrEmpty(staffUpdate.MaintenanceType)) updateData["MaintenanceType"] = staffUpdate.MaintenanceType;
-
-        // Ensure we don’t accidentally overwrite email
-        // Email is only used to locate staff
-
-        if (updateData.Count == 0)
-            return BadRequest(new { error = "No fields provided to update." });
-
-        // 4. Apply updates to Firestore
-        await staffDoc.Reference.UpdateAsync(updateData);
-
-        return Ok(new { message = $"Staff '{staffUpdate.Email}' updated successfully." });
-    }
-    catch (FirebaseAuthException ex)
-    {
-        return Unauthorized(new { error = "Authentication failed: " + ex.Message, code = ex.AuthErrorCode });
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { error = "Internal server error: " + ex.Message });
-    }
-}
+                return Ok(new { message = $"Staff '{staffUpdate.Email}' updated successfully." });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal server error: " + ex.Message });
+            }
+        }
 
 [HttpGet("staff/all")]
 public async Task<IActionResult> GetAllStaff()

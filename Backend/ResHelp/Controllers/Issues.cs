@@ -50,6 +50,7 @@ public async Task<IActionResult> ReportIssue(
             ImageUrl = issue.ImageUrl,
             IsUrgent = issue.IsUrgent,
             ReporterEmail = issue.ReporterEmail,
+            ReporterName = $"{issue.Name} {issue.Surname}",
             ReportedBy = uid,
             Status = "Pending",
             ReportedAt = DateTime.UtcNow,

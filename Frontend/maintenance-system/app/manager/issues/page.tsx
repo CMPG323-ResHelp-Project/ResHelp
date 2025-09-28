@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Navigation } from "@/components/navigation";
 import {
@@ -31,7 +31,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { Search, Plus, MapPin, ArrowUpDown, User, Edit, Trash2 } from "lucide-react";
+import { Search, Plus, ArrowUpDown, Edit, Trash2, Loader2 } from "lucide-react";
 import {
   Select,
   SelectContent,
@@ -39,81 +39,261 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 // --- Request Type ---
-type Request = {
-  id: number;
-  student_name: string;
-  student_number: string;
-  pickup_location: string;
-  destination: string;
+type Issue = {
+  id: number; // currently 'number', but Firestore uses string Id
+  title: string;
+  description: string;
+  category: string;
+  priority: string;
+  location: string;
+  isUrgent: boolean;
   status: "Pending" | "Assigned" | "In_progress" | "Completed" | "Cancelled";
-  created_at: string;
-  student_id: number;
-  pickup_time: string;
+  created_at: string; // currently, we use this, but Firestore has ReportedAt
+  reporterEmail: string;
+  reporterName: string;
 };
 
-// --- Mock Data ---
-const initialRequests: Request[] = [
-  { id: 1, student_name: "Alice Johnson", student_number: "S1001", pickup_location: "Res A Gate", destination: "Library East", status: "Pending", created_at: new Date(Date.now() - 3600000).toISOString(), student_id: 1, pickup_time: new Date(Date.now() + 3600000).toISOString() },
-  { id: 2, student_name: "Bob Smith", student_number: "S1002", pickup_location: "Sports Field", destination: "Admin Building", status: "Completed", created_at: new Date(Date.now() - 86400000).toISOString(), student_id: 2, pickup_time: new Date(Date.now() - 86400000).toISOString() },
-  { id: 3, student_name: "Charlie Brown", student_number: "S1003", pickup_location: "Lecture Hall 5", destination: "Res C Gate", status: "Assigned", created_at: new Date(Date.now() - 7200000).toISOString(), student_id: 3, pickup_time: new Date(Date.now() + 7200000).toISOString() },
-  { id: 4, student_name: "Diana Prince", student_number: "S1004", pickup_location: "Main Entrance", destination: "Research Block", status: "Cancelled", created_at: new Date(Date.now() - 1800000).toISOString(), student_id: 4, pickup_time: new Date(Date.now() + 1800000).toISOString() },
-  { id: 5, student_name: "Ethan Hunt", student_number: "S1005", pickup_location: "Cafeteria", destination: "Engineering Lab", status: "In_progress", created_at: new Date(Date.now() - 300000).toISOString(), student_id: 5, pickup_time: new Date(Date.now() + 300000).toISOString() },
-];
 
 export default function ManagerIssuesPage() {
   const router = useRouter();
 
-  const [requests, setRequests] = useState<Request[]>(initialRequests);
   const [searchTerm, setSearchTerm] = useState("");
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
   const [sortKey, setSortKey] = useState<'created_at' | 'status'>('created_at');
   const [selectedRequestToDelete, setSelectedRequestToDelete] = useState<number | null>(null);
-  const [editingRequest, setEditingRequest] = useState<Request | null>(null);
+  const [editingRequest, setEditingRequest] = useState<Issue | null>(null);
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isTableLoading, setIsTableLoading] = useState(false);
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [isEditLoading, setIsEditLoading] = useState(false);
+  const [isAddLoading, setIsAddLoading] = useState(false);
 
+  
   const [formData, setFormData] = useState({
-    student_id: "",
-    pickup_location: "",
-    destination: "",
-    pickup_time: new Date().toISOString().slice(0, 16),
+    title: "",
+    description: "",
+    category: "",
+    priority: "",
+    isUrgent: false,
+    location: "",
+    reporterEmail: "",
   });
 
-  const updateFormData = (field: string, value: string) => {
+  useEffect(() => {
+    const fetchIssues = async () => {
+      setErrorMessage(null);
+      setIsTableLoading(true);
+  
+      try {
+        const response = await fetch("http://localhost:5229/issue/get", { method: "GET" });
+        if (!response.ok) throw new Error("Failed to fetch issues");
+  
+        const issuesList: Issue[] = await response.json();
+        console.log("Fetched issues:", issuesList);
+        setIssues(issuesList); // <-- use requests state, like staff uses staff state
+      } catch (err: any) {
+        setErrorMessage(err.message);
+      } finally {
+        setIsTableLoading(false);
+      }
+    };
+  
+    fetchIssues();
+  }, []);
+   
+
+  
+// API Handling Logic for UPDATE Issue 
+const handleUpdateIssue = async (e?: React.FormEvent) => {
+  if (e) e.preventDefault();
+  if (!editingRequest) return; // nothing to update
+
+  // 🔎 Validation should live here, not just in the button
+  if (
+    !editingRequest.title ||
+    !editingRequest.description ||
+    !editingRequest.category ||
+    !editingRequest.priority ||
+    !editingRequest.location
+  ) {
+    setErrorMessage("All fields are required.");
+    return; // ⛔ stop before API call
+  }
+
+  setErrorMessage(null);
+  setConfirmationMessage(null);
+  setIsEditLoading(true); // START loading
+
+  try {
+    const payload: any = {
+      Title: editingRequest.title,
+      Description: editingRequest.description,
+      Category: editingRequest.category,
+      Priority: editingRequest.priority,
+      Location: editingRequest.location,
+      IsUrgent: editingRequest.isUrgent,
+    };
+
+    const response = await fetch(
+      `http://localhost:5229/issue/update/${editingRequest.id}`,
+      {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({
+        error: response.statusText,
+      }));
+      throw new Error(
+        errorBody.error || `Server returned status: ${response.status}`
+      );
+    }
+
+    // Reload after update
+    const reloadResponse = await fetch("http://localhost:5229/issue/get", {
+      method: "GET",
+    });
+    const updatedIssues: Issue[] = await reloadResponse.json();
+    setIssues(updatedIssues);
+
+    setEditingRequest(null);
+    setFormData({
+      title: "",
+      description: "",
+      category: "",
+      priority: "",
+      isUrgent: false,
+      reporterEmail: "",
+      location: "",
+    });
+
+    setConfirmationMessage("Issue updated successfully!");
+    setTimeout(() => setConfirmationMessage(null), 3000);
+  } catch (err: any) {
+    console.error("API Error:", err);
+    const message = (err as Error).message.includes("Failed to fetch")
+      ? "Failed to fetch. Check if the C# API is running and the URL is correct."
+      : (err as Error).message;
+    setErrorMessage(message);
+  } finally {
+    setIsEditLoading(false);
+  }
+};
+
+
+  const updateFormData = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
 
-  const handleAddRequest = () => {
-    if (!formData.student_id || !formData.pickup_location || !formData.destination || !formData.pickup_time) {
-      alert("All fields are required.");
+
+  const handleAddRequest = async () => {
+    // ✅ Validate required fields
+    if (
+      !formData.title ||
+      !formData.description ||
+      !formData.category ||
+      !formData.priority ||
+      !formData.reporterEmail
+    ) {
+      setErrorMessage("All fields are required.");
       return;
     }
+    
+    setErrorMessage(null);
+    setConfirmationMessage(null);
+    setIsAddLoading(true); // START loading
 
-    const newRequest: Request = {
-      id: Date.now(),
-      student_name: `New Student ${formData.student_id}`,
-      student_number: `M${formData.student_id}`,
-      ...formData,
-      status: "Pending",
-      created_at: new Date().toISOString(),
-      student_id: parseInt(formData.student_id),
-    };
-    setRequests(prev => [newRequest, ...prev]);
-    setIsAddDialogOpen(false);
-    setFormData({ student_id: "", pickup_location: "", destination: "", pickup_time: new Date().toISOString().slice(0, 16) });
-    setConfirmationMessage("Issue Added successfully! ");
-    setTimeout(() => setConfirmationMessage(null), 3000);
+  
+    try {
+      // --- 1️⃣ Check if user exists by email ---
+      const userCheckResponse = await fetch(
+        `http://localhost:5229/issue/check?email=${encodeURIComponent(formData.reporterEmail)}`,
+        { method: "GET" }
+      );
+  
+      if (!userCheckResponse.ok) {
+        throw new Error("Failed to check user email");
+      }
+  
+      const userData = await userCheckResponse.json(); // expect { exists: true/false, userType: "student", name, location }
+  
+      if (!userData.exists) {
+        setErrorMessage("No such user exists.");
+        return; // stop here if email is invalid
+      }
+  
+      // --- 2️⃣ Ensure the user is a student ---
+      if (userData.userType !== "student") {
+        setErrorMessage("Only students can submit issues.");
+        return;
+      }
+  
+      // --- 3️⃣ Prepare payload with automatic name + location ---
+      const payload = {
+        ...formData,
+        reporterName: userData.name,
+        location: userData.location, // automatically populated
+      };
+  
+      // --- 4️⃣ Send issue to backend ---
+      const response = await fetch("http://localhost:5229/issue/add", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+  
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => ({
+          error: response.statusText,
+        }));
+        throw new Error(errorBody.error || `Server returned status: ${response.status}`);
+      }
+  
+      // --- 5️⃣ Reload all issues to avoid undefined fields ---
+      const reloadResponse = await fetch("http://localhost:5229/issue/get", { method: "GET" });
+      if (!reloadResponse.ok) throw new Error("Failed to reload issues");
+  
+      const updatedIssues: Issue[] = await reloadResponse.json();
+      setIssues(updatedIssues);
+  
+      setIsAddDialogOpen(false);
+      setFormData({
+        title: "",
+        description: "",
+        category: "",
+        priority: "",
+        isUrgent: false,
+        location: "",
+        reporterEmail: "",
+      });
+  
+      setConfirmationMessage("Issue added successfully!");
+      setTimeout(() => setConfirmationMessage(null), 3000);
+  
+    } catch (err: any) {
+      console.error(err);
+      setErrorMessage(err.message || "Failed to add issue");
+    }finally {
+      setIsAddLoading(false)
+    }
   };
-
+  
+  
   const handleDeleteRequest = (id: number) => setSelectedRequestToDelete(id);
   const confirmDeleteRequest = () => {
     if (selectedRequestToDelete === null) return;
-    setRequests(prev => prev.filter(r => r.id !== selectedRequestToDelete));
+    setIssues(prev => prev.filter(r => r.id !== selectedRequestToDelete));
     setSelectedRequestToDelete(null);
-    setConfirmationMessage("Issue Deleted successfully! ");
+    setConfirmationMessage("Issue Deleted successfully!");
     setTimeout(() => setConfirmationMessage(null), 3000);
   };
 
@@ -126,7 +306,7 @@ export default function ManagerIssuesPage() {
     }
   };
 
-  const getStatusColor = (status: Request['status']) => {
+  const getStatusColor = (status: Issue['status']) => {
     switch (status) {
       case "Pending": return "bg-yellow-100 text-yellow-800 border-yellow-200";
       case "Assigned": return "bg-blue-100 text-blue-800 border-blue-200";
@@ -137,17 +317,62 @@ export default function ManagerIssuesPage() {
     }
   };
 
-  const formatDateTime = (dateString: string) =>
-    new Date(dateString).toLocaleString("en-ZA", { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  const formatDateTime = (dateString: string) => {
+    if (!dateString) return "-"; // fallback for missing dates
+    const date = new Date(dateString);
+    if (isNaN(date.getTime())) return "-"; // fallback for invalid dates
+    return date.toLocaleString("en-ZA", {
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  };
+  
+  function formatDateTimeSafe(value: any): string {
+    if (!value) return "-";
+  
+    let date: Date;
+  
+    // Firestore Timestamp object
+    if (typeof value === "object" && value.seconds !== undefined) {
+      date = new Date(value.seconds * 1000);
+    }
+    // JS Date object
+    else if (value instanceof Date) {
+      date = value;
+    }
+    // ISO string
+    else if (typeof value === "string") {
+      date = new Date(value);
+    }
+    else {
+      return "-";
+    }
+  
+    if (isNaN(date.getTime())) return "-";
+  
+    return date.toLocaleString("en-ZA", {
+      year: "numeric",
+      month: "short",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+  
+  
 
-  const filteredRequests = requests.filter(
+  const filteredRequests = issues.filter(
     r => (selectedStatus === "All" || r.status === selectedStatus) &&
-      (r.student_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.student_number.includes(searchTerm) ||
-        r.pickup_location.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        r.destination.toLowerCase().includes(searchTerm.toLowerCase()))
+      (
+        (r.title?.toLowerCase() ?? "").includes(searchTerm.toLowerCase()) ||
+        (r.category?.toLowerCase() ?? "").includes(searchTerm.toLowerCase()) ||
+        (r.priority?.toLowerCase() ?? "").includes(searchTerm.toLowerCase()) ||
+        (r.location?.toLowerCase() ?? "").includes(searchTerm.toLowerCase())
+      )
   );
-
+  
   const sortedRequests = [...filteredRequests].sort((a, b) => {
     if (sortKey === 'created_at') {
       const dateA = new Date(a.created_at).getTime();
@@ -184,37 +409,78 @@ export default function ManagerIssuesPage() {
             <DialogContent className="max-w-md mx-auto rounded-2xl shadow-2xl border border-muted/20 bg-background/95 backdrop-blur-lg p-6 animate-fade-in">
               <DialogHeader>
                 <DialogTitle className="text-xl font-bold flex items-center gap-2">
-                  <Plus className="h-5 w-5 text-primary" /> Add New Issues
+                  <Plus className="h-5 w-5 text-primary" /> Add New Issue
                 </DialogTitle>
                 <DialogDescription className="text-sm text-muted-foreground mt-1">
                   Create a new Issue on behalf of a student.
                 </DialogDescription>
               </DialogHeader>
 
+                    {/* Compact Form */}
+            {errorMessage &&  (
+                              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded">
+                              **Error:** {errorMessage}
+                            </div>
+                  )}
+
               <div className="space-y-4 mt-4">
                 <div className="space-y-2">
-                  <Label htmlFor="student_id">Student ID</Label>
-                  <Input id="student_id" value={formData.student_id} onChange={e => updateFormData("student_id", e.target.value)} />
+                  <Label htmlFor="title">Issue Title</Label>
+                  <Input id="title" value={formData.title} onChange={e => updateFormData("title", e.target.value)} disabled={isAddLoading} />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pickup_location">Pickup Location</Label>
-                  <Input id="pickup_location" value={formData.pickup_location} onChange={e => updateFormData("pickup_location", e.target.value)} />
+                  <Label htmlFor="description">Description</Label>
+                  <Textarea id="description" value={formData.description} onChange={e => updateFormData("description", e.target.value)} disabled={isAddLoading}/>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="destination">Destination</Label>
-                  <Input id="destination" value={formData.destination} onChange={e => updateFormData("destination", e.target.value)} />
+                  <Label htmlFor="category">Category</Label>
+                  <Select value={formData.category} onValueChange={v => updateFormData("category", v)}>
+                    <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="plumbing">Plumbing</SelectItem>
+                      <SelectItem value="electrical">Electrical</SelectItem>
+                      <SelectItem value="heating">Heating/Cooling</SelectItem>
+                      <SelectItem value="locks">Locks & Security</SelectItem>
+                      <SelectItem value="appliances">Appliances</SelectItem>
+                      <SelectItem value="cleaning">Cleaning</SelectItem>
+                      <SelectItem value="other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="pickup_time">Pickup Time</Label>
-                  <Input id="pickup_time" type="datetime-local" value={formData.pickup_time} onChange={e => updateFormData("pickup_time", e.target.value)} />
+                  <Label htmlFor="priority">Priority</Label>
+                  <Select value={formData.priority} onValueChange={v => updateFormData("priority", v)} disabled={isAddLoading}>
+                    <SelectTrigger><SelectValue placeholder="Select priority" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="low">Low</SelectItem>
+                      <SelectItem value="medium">Medium</SelectItem>
+                      <SelectItem value="high">High</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                    <Label htmlFor="reporterEmail">Reporter Email</Label>
+                    <Input
+                      id="reporterEmail"
+                      type="email"
+                      value={formData.reporterEmail || ""}
+                      onChange={e => updateFormData("reporterEmail", e.target.value)}
+                      disabled={isAddLoading}
+                      placeholder="Enter the reporter's email"
+                    />
+                  </div>
+                <div className="flex items-center space-x-2">
+                  <input type="checkbox" checked={formData.isUrgent} onChange={e => updateFormData("isUrgent", e.target.checked)} />
+                  <Label>Mark as Urgent</Label>
                 </div>
               </div>
 
               <div className="flex justify-end gap-3 mt-6">
-                <Button variant="outline" className="text-muted-foreground hover:bg-muted/20" onClick={() => setIsAddDialogOpen(false)}>Cancel</Button>
-                <Button className="flex items-center gap-2" onClick={handleAddRequest}>
-                  <Plus className="h-4 w-4" /> Add Issues
-                </Button>
+              <Button variant="outline" onClick={() => setIsAddDialogOpen(false)} disabled={isAddLoading}>Cancel</Button>
+              <Button onClick={handleAddRequest} disabled={isAddLoading}>
+  {isAddLoading ? "Adding..." : "Add Issue"}
+</Button>
+
               </div>
             </DialogContent>
           </Dialog>
@@ -226,7 +492,7 @@ export default function ManagerIssuesPage() {
             <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground h-4 w-4" />
             <Input placeholder="Search Issues..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" />
           </div>
-          <Badge variant="outline" className="text-sm">{filteredRequests.length} of {requests.length} Issues</Badge>
+          <Badge variant="outline" className="text-sm">{filteredRequests.length} of {issues.length} Issues</Badge>
           <Select value={selectedStatus} onValueChange={setSelectedStatus}>
             <SelectTrigger className="w-[180px]"><SelectValue placeholder="Filter by Status" /></SelectTrigger>
             <SelectContent>
@@ -245,182 +511,218 @@ export default function ManagerIssuesPage() {
 
         {confirmationMessage && <div className="bg-green-100 text-green-700 p-2 rounded">{confirmationMessage}</div>}
 
-
         {/* Requests Table */}
         <Card>
           <CardHeader>
             <CardTitle>Issue Log</CardTitle>
-            <CardDescription>Complete log of all ride Issues</CardDescription>
+            <CardDescription>Complete log of all reported issues</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-y-auto" style={{ maxHeight: "400px" }}>
+            <div className="overflow-y-auto" style={{ maxHeight: "500px" }}>
               <Table>
                 <TableHeader>
                   <TableRow>
-                    <TableHead>Student</TableHead>
-                    <TableHead>Route</TableHead>
+                    <TableHead>Title</TableHead>
+                    <TableHead>Category</TableHead>
+                    <TableHead>Priority</TableHead>
+                    <TableHead>Location</TableHead>
+                    <TableHead>Reported By</TableHead>
+                    <TableHead>Urgent</TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead>Time</TableHead>
-                    <TableHead className="text-center">Actions</TableHead>
+                    <TableHead>Date</TableHead>
+                    <TableHead>Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {sortedRequests.length > 0 ? sortedRequests.map(request => (
-                    <TableRow key={request.id}>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <User className="h-4 w-4 text-muted-foreground" />
-                          <div>
-                            <div className="font-medium">{request.student_name}</div>
-                            <div className="text-muted-foreground text-sm">{request.student_number}</div>
-                          </div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <div className="flex items-center gap-2">
-                          <MapPin className="h-4 w-4 text-muted-foreground" />
-                          <div>{request.pickup_location} → {request.destination}</div>
-                        </div>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={`px-2 py-1 rounded-full ${getStatusColor(request.status)}`}>{request.status.replace("_", " ")}</Badge>
-                      </TableCell>
-                      <TableCell>{formatDateTime(request.created_at)}</TableCell>
-                      <TableCell className="flex justify-center gap-2">
-                        <Button variant="outline" size="sm" onClick={() => setEditingRequest(request)}>
-                          <Edit className="h-4 w-4" />
-                        </Button>
-                        <Button variant="destructive" size="sm" onClick={() => handleDeleteRequest(request.id)}>
-                          <Trash2 className="h-4 w-4" />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  )) : (
-                    <TableRow>
-                      <TableCell colSpan={5} className="text-center text-muted-foreground py-6">No requests found</TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
+  {isTableLoading ? (
+    <TableRow>
+      <TableCell colSpan={8} className="h-24 text-center">
+        <Loader2 className="animate-spin h-6 w-6 mx-auto text-primary" />
+        <div>Loading issues...</div>
+      </TableCell>
+    </TableRow>
+  ) : sortedRequests.length > 0 ? (
+    sortedRequests.map(r => (
+      <TableRow key={r.id}>
+        <TableCell>{r.title}</TableCell>
+        <TableCell>{r.category}</TableCell>
+        <TableCell>{r.priority}</TableCell>
+        <TableCell>{r.location}</TableCell>
+        <TableCell>{r.reporterName} ({r.reporterEmail})</TableCell>
+        <TableCell>
+          {r.isUrgent ? (
+            <Badge variant="destructive">Yes</Badge>
+          ) : (
+            <Badge variant="secondary">No</Badge>
+          )}
+        </TableCell>
+        <TableCell>
+        <Badge className={getStatusColor(r.status ?? "Pending")}>
+  {(r.status ?? "Pending").replace("_", " ")}
+</Badge>
+
+        </TableCell>
+        <TableCell>{formatDateTimeSafe(r.created_at)}</TableCell>
+        <TableCell className="flex gap-2">
+  {/* Edit button */}
+  <Button
+    variant="outline"
+    size="sm"
+    onClick={() => setEditingRequest(r)}
+    disabled={r.status !== "Pending"} // ✅ Only Pending can be edited
+    title={r.status !== "Pending" ? "Only Pending issues can be edited" : ""}
+  >
+    <Edit className="h-4 w-4" />
+  </Button>
+
+</TableCell>
+
+      </TableRow>
+    ))
+  ) : (
+    <TableRow>
+      <TableCell
+        colSpan={8}
+        className="h-24 text-center text-muted-foreground"
+      >
+        No issues found.
+      </TableCell>
+    </TableRow>
+  )}
+</TableBody>
+
               </Table>
             </div>
           </CardContent>
         </Card>
 
-        {/* Edit Request Dialog */}
-<Dialog open={editingRequest !== null} onOpenChange={() => setEditingRequest(null)}>
-  <DialogContent className="max-w-md mx-auto rounded-2xl shadow-2xl border border-muted/20 bg-background/95 backdrop-blur-lg p-6 animate-fade-in">
-    <DialogHeader>
-      <DialogTitle className="text-xl font-bold flex items-center gap-2">
-        <Edit className="h-5 w-5 text-primary" /> Edit Request
-      </DialogTitle>
-      <DialogDescription className="text-sm text-muted-foreground mt-1">
-        Update the details of this ride request.
-      </DialogDescription>
-    </DialogHeader>
-
-    {editingRequest && (
-      <div className="space-y-4 mt-4">
-        <div className="space-y-2">
-          <Label htmlFor="edit_pickup_location">Pickup Location</Label>
-          <Input
-            id="edit_pickup_location"
-            value={editingRequest.pickup_location}
-            onChange={e =>
-              setEditingRequest(prev =>
-                prev ? { ...prev, pickup_location: e.target.value } : null
-              )
-            }
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="edit_destination">Destination</Label>
-          <Input
-            id="edit_destination"
-            value={editingRequest.destination}
-            onChange={e =>
-              setEditingRequest(prev =>
-                prev ? { ...prev, destination: e.target.value } : null
-              )
-            }
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="edit_pickup_time">Pickup Time</Label>
-          <Input
-            id="edit_pickup_time"
-            type="datetime-local"
-            value={editingRequest.pickup_time.slice(0,16)}
-            onChange={e =>
-              setEditingRequest(prev =>
-                prev ? { ...prev, pickup_time: e.target.value } : null
-              )
-            }
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="edit_status">Status</Label>
-          <Select
-            value={editingRequest.status}
-            onValueChange={value =>
-              setEditingRequest(prev =>
-                prev ? { ...prev, status: value as Request["status"] } : null
-              )
-            }
-          >
-            <SelectTrigger><SelectValue /></SelectTrigger>
-            <SelectContent>
-              <SelectItem value="Pending">Pending</SelectItem>
-              <SelectItem value="Assigned">Assigned</SelectItem>
-              <SelectItem value="In_progress">In Progress</SelectItem>
-              <SelectItem value="Completed">Completed</SelectItem>
-              <SelectItem value="Cancelled">Cancelled</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-    )}
-
-    <div className="flex justify-end gap-3 mt-6">
-      <Button variant="outline" className="text-muted-foreground hover:bg-muted/20" onClick={() => setEditingRequest(null)}>Cancel</Button>
-      <Button
-        className="flex items-center gap-2"
-        onClick={() => {
-          if (editingRequest) {
-            setRequests(prev =>
-              prev.map(r => (r.id === editingRequest.id ? editingRequest : r))
-            );
-            setEditingRequest(null);
-            setConfirmationMessage("Student updated successfully! 🎉");
-            setTimeout(() => setConfirmationMessage(null), 3000);
-          }
-        }}
-      >
-        <Edit className="h-4 w-4" /> Update
-      </Button>
-    </div>
-  </DialogContent>
-</Dialog>
-
-
         {/* Delete Confirmation Dialog */}
         <Dialog open={selectedRequestToDelete !== null} onOpenChange={() => setSelectedRequestToDelete(null)}>
-          <DialogContent className="max-w-md mx-auto rounded-2xl shadow-2xl border border-muted/20 bg-background/95 backdrop-blur-lg p-6 animate-fade-in">
+          <DialogContent className="max-w-md mx-auto mt-24 rounded-2xl shadow-2xl border border-muted/20 bg-background/95 backdrop-blur-lg p-6 animate-fade-in">
             <DialogHeader>
-              <DialogTitle className="text-xl font-bold text-destructive flex items-center gap-2">
-                <Trash2 className="h-5 w-5" /> Confirm Deletion
-              </DialogTitle>
-              <DialogDescription className="text-sm text-muted-foreground mt-1">
-                Are you sure you want to delete this Issue? This action cannot be undone.
-              </DialogDescription>
+              <DialogTitle className="text-xl font-bold text-destructive">Confirm Delete</DialogTitle>
+              <DialogDescription>Are you sure you want to delete this issue? This action cannot be undone.</DialogDescription>
             </DialogHeader>
             <div className="flex justify-end gap-3 mt-6">
-              <Button variant="outline" className="text-muted-foreground hover:bg-muted/20" onClick={() => setSelectedRequestToDelete(null)}>Cancel</Button>
-              <Button variant="destructive" className="flex items-center gap-2" onClick={confirmDeleteRequest}>
-                <Trash2 className="h-4 w-4" /> Delete
-              </Button>
+              <Button variant="outline" onClick={() => setSelectedRequestToDelete(null)}>Cancel</Button>
+              <Button variant="destructive" onClick={confirmDeleteRequest}>Delete</Button>
             </div>
           </DialogContent>
         </Dialog>
+
+        {/* Edit Request Dialog */}
+<Dialog open={editingRequest !== null} onOpenChange={() => setEditingRequest(null)}>
+  {editingRequest && (
+    <DialogContent className="max-w-md mx-auto rounded-2xl shadow-2xl ...">
+      <DialogHeader>
+        <DialogTitle className="text-xl font-bold">Edit Issue</DialogTitle>
+      </DialogHeader>
+
+            {/* Compact Form */}
+            {errorMessage && (
+                              <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-2 rounded">
+                              **Error:** {errorMessage}
+                            </div>
+                  )}
+
+      <div className="space-y-4 mt-4">
+        <div className="space-y-2">
+          <Label>Title</Label>
+          <Input
+            value={editingRequest.title}
+            onChange={e =>
+              setEditingRequest(prev => prev ? { ...prev, title: e.target.value } : null)
+            }
+            disabled={isEditLoading}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Description</Label>
+          <Textarea
+            value={editingRequest.description}
+            onChange={e =>
+              setEditingRequest(prev => prev ? { ...prev, description: e.target.value } : null)
+              
+            }
+            disabled={isEditLoading}
+          />
+        </div>
+
+        <div className="space-y-2">
+          <Label>Category</Label>
+          <Select
+            value={editingRequest.category}
+            onValueChange={v =>
+              setEditingRequest(prev => prev ? { ...prev, category: v } : null)
+            }
+            disabled={isEditLoading}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="plumbing">Plumbing</SelectItem>
+              <SelectItem value="electrical">Electrical</SelectItem>
+              <SelectItem value="heating">Heating/Cooling</SelectItem>
+              <SelectItem value="locks">Locks & Security</SelectItem>
+              <SelectItem value="appliances">Appliances</SelectItem>
+              <SelectItem value="cleaning">Cleaning</SelectItem>
+              <SelectItem value="other">Other</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+          <Label>Priority</Label>
+          <Select
+            value={editingRequest.priority}
+            onValueChange={v =>
+              setEditingRequest(prev => prev ? { ...prev, priority: v } : null)
+            }
+            disabled={isEditLoading}
+          >
+            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="low">Low</SelectItem>
+              <SelectItem value="medium">Medium</SelectItem>
+              <SelectItem value="high">High</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+
+        <div className="space-y-2">
+  <Label>Location - Not Editable </Label>
+  <Input
+    value={editingRequest.location}
+    readOnly
+    className="pointer-events-none bg-gray-100" // make it visually disabled & not clickable
+  />
+</div>
+
+
+        <div className="flex items-center space-x-2">
+          <input
+            type="checkbox"
+            checked={editingRequest.isUrgent}
+            onChange={e =>
+              setEditingRequest(prev => prev ? { ...prev, isUrgent: e.target.checked } : null)
+            }
+            disabled={isEditLoading}
+          />
+          <Label>Mark as Urgent</Label>
+        </div>
+      </div>
+
+      <div className="flex justify-end gap-3 mt-6">
+        <Button variant="outline" onClick={() => setEditingRequest(null)} disabled={isEditLoading} >Cancel</Button>
+        <Button onClick={handleUpdateIssue} disabled={isEditLoading}>
+  {isEditLoading ? "Saving..." : "Save"}
+</Button>
+
+      </div>
+    </DialogContent>
+  )}
+</Dialog>
+
       </div>
     </div>
   );

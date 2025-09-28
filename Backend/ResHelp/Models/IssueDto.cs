@@ -18,6 +18,8 @@ namespace ResHelp.Models
         public bool IsUrgent { get; set; } = false; 
         public string ReporterEmail { get; set; } = string.Empty; // Holds the user's email
         public int Rating { get; set; }
+        public string Name { get; set; } = string.Empty; 
+        public string Surname { get; set; } = string.Empty; 
 
     }
 }

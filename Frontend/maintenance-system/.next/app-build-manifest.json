@@ -16,15 +16,20 @@
       "static/chunks/main-app.js",
       "static/chunks/app/manager/dashboard/page.js"
     ],
+    "/manager/issues/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/manager/issues/page.js"
+    ],
+    "/manager/analytics/page": [
+      "static/chunks/webpack.js",
+      "static/chunks/main-app.js",
+      "static/chunks/app/manager/analytics/page.js"
+    ],
     "/manager/staff/page": [
       "static/chunks/webpack.js",
       "static/chunks/main-app.js",
       "static/chunks/app/manager/staff/page.js"
-    ],
-    "/manager/students/page": [
-      "static/chunks/webpack.js",
-      "static/chunks/main-app.js",
-      "static/chunks/app/manager/students/page.js"
     ]
   }
 }
