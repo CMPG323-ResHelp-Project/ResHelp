@@ -51,10 +51,12 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
     let hasError = false;
 
     // Email Validation
-    if (!email.endsWith("@gmail.com")) {
-      setEmailError("Please enter a valid email address ending with @gmail.com.");
-      hasError = true;
-    }
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+if (!emailRegex.test(email)) {
+  setEmailError("Please enter a valid email address.");
+  hasError = true;
+}
 
     // Password Match
     if (password !== confirmPassword) {

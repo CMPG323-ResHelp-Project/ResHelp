@@ -2,6 +2,7 @@ using FirebaseAdmin.Auth;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Mvc;
 using ResHelp.Models;
+using ResHelp.Services;
 using System;
 using System.Threading.Tasks;
 using System.Collections.Generic; // Added for Dictionary use
@@ -13,10 +14,12 @@ namespace ResHelp.Controllers
     public class IssuesController : ControllerBase
     {
         private readonly FirestoreDb _firestoreDb;
+        private readonly EmailService _emailService;
 
-        public IssuesController(FirestoreDb firestoreDb)
+        public IssuesController(FirestoreDb firestoreDb , EmailService emailService )
         {
             _firestoreDb = firestoreDb;
+            _emailService = emailService;
         }
 
         [HttpPost("report")]
@@ -59,7 +62,18 @@ namespace ResHelp.Controllers
                 var docRef = _firestoreDb.Collection("issues").Document(issueDoc.Id);
                 await docRef.SetAsync(issueDoc);
 
-                return Ok(new { message = "Issue reported successfully.", id = issueDoc.Id });
+                string subject = "Issue Logged Successfully";
+                string body = $@"
+                    <p>Hi,</p>
+                    <p>Your issue <b>{issue.Title}</b> has been logged successfully.</p>
+                    <p>Description: {issue.Description}</p>
+                    <p>Status: Pending</p>
+                    <p>We will notify you once it is resolved.</p>
+                    <p>-- ResHelp Maintenance Team</p>";
+
+        await _emailService.SendEmailAsync(issue.ReporterEmail, subject, body);
+
+                return Ok(new { message = "Issue reported successfully. Email sent..", id = issueDoc.Id });
             }
             catch (FirebaseAuthException ex)
             {

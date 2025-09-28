@@ -149,7 +149,7 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                 </Button>
 
                 <div className="border-t border-border mt-4 pt-4">
-                   {userName && <div className="font-semibold">{userName}</div>}
+                  {userName && <div className="font-semibold">{userName}</div>}
                   {userEmail && <div className="text-sm text-gray-500 truncate">{userEmail}</div>}
                   <Button
                     variant="ghost"

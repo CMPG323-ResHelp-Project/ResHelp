@@ -1,5 +1,9 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { onSnapshot, collection, query, orderBy, limit, where } from "firebase/firestore"
+import { db } from "@/lib/firebase"
+
 import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -7,20 +11,46 @@ import { Badge } from "@/components/ui/badge"
 import { Clock, AlertTriangle, CheckCircle, Users, Wrench } from "lucide-react"
 import { useRouter } from "next/navigation"
 
-// Mock data for staff dashboard
-const dashboardStats = {
-  totalIssues: 0,
-  pendingIssues: 0,
-  inProgressIssues: 0,
-  resolvedToday: 0,
-  urgentIssues: 0,
-}
-
-const recentIssues: any[] = []
-
 export default function StaffDashboard() {
   const router = useRouter()
 
+  // ✅ State for stats and recent issues
+  const [dashboardStats, setDashboardStats] = useState({
+    totalIssues: 0,
+    pendingIssues: 0,
+    inProgressIssues: 0,
+    resolvedToday: 0,
+    urgentIssues: 0,
+  })
+  const [recentIssues, setRecentIssues] = useState<any[]>([])
+
+  // ✅ Real-time subscription
+  useEffect(() => {
+    const q = query(collection(db, "issues"), orderBy("reportedAt", "desc"), limit(5))
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const issues = snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() }))
+
+      // Compute stats
+      const totalIssues = issues.length
+      const pendingIssues = issues.filter((i: any) => i.status === "reported").length
+      const inProgressIssues = issues.filter((i: any) => i.status === "in-progress").length
+      const resolvedToday = issues.filter((i: any) => {
+        if (!i.statusUpdatedAt) return false
+        const updated = new Date(i.statusUpdatedAt.seconds * 1000)
+        const today = new Date()
+        return i.status === "resolved" && updated.toDateString() === today.toDateString()
+      }).length
+      const urgentIssues = issues.filter((i: any) => i.priority === "high").length
+
+      setDashboardStats({ totalIssues, pendingIssues, inProgressIssues, resolvedToday, urgentIssues })
+      setRecentIssues(issues)
+    })
+
+    return () => unsubscribe()
+  }, [])
+
+  // ✅ Helpers
   const getStatusColor = (status: string) => {
     switch (status) {
       case "reported":
@@ -63,7 +93,7 @@ export default function StaffDashboard() {
           </Button>
         </div>
 
-        {/* Stats Cards */}
+        {/* ✅ Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-5 gap-4 mb-6">
           <Card>
             <CardContent className="p-4">
@@ -126,7 +156,7 @@ export default function StaffDashboard() {
           </Card>
         </div>
 
-        {/* Recent Issues */}
+        {/* ✅ Recent Issues */}
         <Card>
           <CardHeader>
             <CardTitle>Recent Issues</CardTitle>
@@ -140,7 +170,7 @@ export default function StaffDashboard() {
               </div>
             ) : (
               <div className="space-y-4">
-                {recentIssues.map((issue) => (
+                {recentIssues.map((issue: any) => (
                   <div
                     key={issue.id}
                     className="flex items-center justify-between p-4 border border-border rounded-lg hover:bg-muted/50 transition-colors"
@@ -148,7 +178,7 @@ export default function StaffDashboard() {
                     <div className="flex-1">
                       <div className="flex items-center space-x-3 mb-2">
                         <h3 className="font-semibold text-foreground">{issue.title}</h3>
-                        {issue.isUrgent && (
+                        {issue.priority === "high" && (
                           <Badge className="bg-red-100 text-red-800 flex items-center space-x-1">
                             <AlertTriangle className="h-3 w-3" />
                             <span>URGENT</span>
@@ -160,7 +190,12 @@ export default function StaffDashboard() {
                       <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                         <span>Student: {issue.student}</span>
                         <span>Location: {issue.room}</span>
-                        <span>Reported: {issue.reportedAt}</span>
+                        <span>
+                          Reported:{" "}
+                          {issue.reportedAt?.seconds
+                            ? new Date(issue.reportedAt.seconds * 1000).toLocaleString()
+                            : "N/A"}
+                        </span>
                       </div>
                     </div>
                     <Button variant="outline" onClick={() => router.push(`/staff/issues/${issue.id}`)} className="ml-4">

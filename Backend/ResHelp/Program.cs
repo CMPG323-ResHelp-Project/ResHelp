@@ -7,7 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 var builder = WebApplication.CreateBuilder(args);
 
 // === Firebase & Firestore setup ===
-string serviceAccountPath = @"C:\Users\ASUS\Downloads\ResHelp\Backend\ResHelp\reshelp-ba48b-firebase-adminsdk-fbsvc-68be648d8b.json";
+string serviceAccountPath = @"C:\Users\User\Documents\ResHelp\Backend\ResHelp\reshelp-ba48b-firebase-adminsdk-fbsvc-68be648d8b.json";
 
 // Initialize Firebase Admin
 var firebaseApp = FirebaseApp.Create(new AppOptions
@@ -24,6 +24,8 @@ builder.Services.AddSingleton(firestoreDb);
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
+builder.Services.AddScoped<ResHelp.Services.EmailService>();
+
 
 // === Configure CORS ===
 builder.Services.AddCors(options =>
