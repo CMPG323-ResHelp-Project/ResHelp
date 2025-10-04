@@ -3,7 +3,6 @@ using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Mvc;
 
-
 // === Create builder ===
 var builder = WebApplication.CreateBuilder(args);
 
