@@ -505,3 +505,7 @@ yarn-error.log*
 # Build artifacts
 /dist
 /build
+
+# next.js
+/.next/
+/out/
