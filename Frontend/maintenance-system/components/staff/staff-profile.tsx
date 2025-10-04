@@ -11,6 +11,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Checkbox } from "@/components/ui/checkbox"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential, signOut } from "firebase/auth"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
+// Simple Loading Spinner component
+const LoadingSpinner = () => (
+  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+);
+
 
 interface UserProfile {
   uid?: string
@@ -41,12 +52,32 @@ export function StaffProfile() {
   const [passwordError, setPasswordError] = useState("")
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [isEmailChangeAllowed, setIsEmailChangeAllowed] = useState(false)
+  const [maintenanceType, setMaintenanceType] = useState<string | undefined>(undefined)
 
-  // Countdown for email verification
+  // State for email update progress (used as Loading state)
   const [isEmailUpdatePending, setIsEmailUpdatePending] = useState(false)
-  const [countdownSeconds, setCountdownSeconds] = useState(10)
-  const countdownRef = useRef<NodeJS.Timeout | null>(null)
-  const [isVerificationStep, setIsVerificationStep] = useState(false) // NEW: covers the "verify email" state
+  // State for the post-API-call verification message (6-second delay before logout)
+  const [isVerificationStep, setIsVerificationStep] = useState(false)
+  const [showEmailConfirmDialog, setShowEmailConfirmDialog] = useState(false);
+  
+  // Ref for the 6-second delay timer
+  const apiDelayRef = useRef<NodeJS.Timeout | null>(null)
+
+
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000); // 5 seconds
+      return () => clearTimeout(timer); // cleanup if component unmounts
+    }
+  }, [message]);
+  
+  // Cleanup for the delay timer
+  useEffect(() => {
+      return () => {
+        if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
+      };
+  }, []);
+
 
   // Fetch profile on mount
   useEffect(() => {
@@ -75,6 +106,7 @@ export function StaffProfile() {
         setEmail(data.email)
         setPhone(data.phone)
         setAddress(data.address || "")
+        setMaintenanceType(data.maintenanceType || "")  // ✅ set state from fetched profile
       } catch (err: any) {
         setError(err.message || "Error fetching profile.")
       } finally {
@@ -85,48 +117,20 @@ export function StaffProfile() {
     return () => unsubscribe()
   }, [])
 
-  // Countdown effect
-  useEffect(() => {
-    if (isEmailUpdatePending && countdownSeconds > 0) {
-      countdownRef.current = setInterval(() => setCountdownSeconds(prev => prev - 1), 1000)
-    } else if (countdownSeconds === 0 && isEmailUpdatePending) {
-      if (countdownRef.current) clearInterval(countdownRef.current)
-
-      setMessage("You will be logged out to allow update.")
-      setIsVerificationStep(true) // 🔒 keep overlay active during verification step
-
-      // Call backend to update email via Firebase Admin
-      fetch("http://localhost:5229/Profile/update", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json", 
-          "Authorization": `Bearer ${idToken}` 
-        },
-        body: JSON.stringify({ name, surname, email, phone, address, sendEmailVerification: true }),
-      })
-      .then(res => res.json())
-      .then(data => {
-        console.log("Email verification sent:", data)
-        // Auto logout after verification email sent
-        setTimeout(() => {
-          signOut(auth)
-        }, 3000)
-      })
-      .catch(err => setError("Failed to send email verification: " + err.message))
-
-      setIsEmailUpdatePending(false) // stop countdown, move to verification step
-    }
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current) }
-  }, [isEmailUpdatePending, countdownSeconds, idToken, name, surname, email, phone, address])
-
   const handleCancelUpdate = () => {
-    if (countdownRef.current) clearInterval(countdownRef.current)
+    if (apiDelayRef.current) clearTimeout(apiDelayRef.current)
     setIsEmailUpdatePending(false)
     setIsVerificationStep(false)
-    setCountdownSeconds(10)
-    setEmail(profile?.email || "")
+    setEmail(profile?.email || "") // Revert email to original
     setMessage("Email update cancelled.")
   }
+
+  useEffect(() => {
+    if (profile?.maintenanceType) {
+      setMaintenanceType(profile.maintenanceType)
+    }
+  }, [profile])
+
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -134,11 +138,11 @@ export function StaffProfile() {
     setMessage(null)
     setPasswordError("")
     setIsLoading(true)
-  
+
     try {
       const user = auth.currentUser
       if (!user || !idToken) throw new Error("User not authenticated or token missing.")
-  
+
       // Handle password change
       if (showPasswordChange) {
         if (!currentPassword) {
@@ -148,7 +152,7 @@ export function StaffProfile() {
         }
         const credential = EmailAuthProvider.credential(user.email!, currentPassword)
         await reauthenticateWithCredential(user, credential)
-  
+
         if (newPassword !== confirmNewPassword) throw new Error("New passwords do not match.")
         await updatePassword(user, newPassword)
         setMessage("Password updated successfully!")
@@ -156,24 +160,16 @@ export function StaffProfile() {
         setNewPassword("")
         setConfirmNewPassword("")
       }
-  
-      // ✅ Handle email change with confirmation
+
+      // ✅ Handle email change with dialog (no window.confirm)
       if (isEmailChangeAllowed && email !== profile?.email) {
-        const confirmed = window.confirm(`Are you sure you want to change your email to ${email}?`)
-        if (!confirmed) {
-          setIsLoading(false)
-          return
-        }
-  
-        setMessage(`Email will be updated in ${countdownSeconds} seconds. Do not exit the page.`)
-        setIsEmailUpdatePending(true)
-        setCountdownSeconds(10)
+        setShowEmailConfirmDialog(true) // Open dialog instead of confirm
         setIsLoading(false)
         return
       }
-  
-      // Update other profile info via backend
-      const updateData = { name, surname, email: profile?.email, phone, address }
+
+      // Update other profile info via backend (excluding email change)
+      const updateData = { name, surname, email: profile?.email, phone, address, maintenanceType }
       const response = await fetch("http://localhost:5229/Profile/update", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
@@ -183,7 +179,7 @@ export function StaffProfile() {
         const errData = await response.json()
         throw new Error(errData.error || "Failed to update profile.")
       }
-  
+
       setMessage("Profile updated successfully!")
       setIsEditing(false)
     } catch (err: any) {
@@ -192,16 +188,16 @@ export function StaffProfile() {
       setIsLoading(false)
     }
   }
-  
+
   if (isLoading && !profile) return <div className="p-4 text-center">Loading profile...</div>
   if (error) return <div className="p-4 text-center text-red-500">{error}</div>
   if (!profile) return <div className="p-4 text-center">No profile data found.</div>
 
   return (
     <div className="relative">
-      {/* Overlay stays active during countdown and verification */}
+      {/* Overlay stays active and disables all interaction during email update process */}
       {(isEmailUpdatePending || isVerificationStep) && (
-        <div className="fixed inset-0 z-40" style={{ backgroundColor: "rgba(255,255,255,0.7)" }} />
+        <div className="fixed inset-0 z-40 bg-white/70" />
       )}
 
       <div className="space-y-6 max-w-2xl mx-auto p-4 md:p-8 relative z-50">
@@ -211,30 +207,37 @@ export function StaffProfile() {
             <CardDescription>Update your personal information and password.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleUpdateProfile} className="space-y-4 pointer-events-none relative">
-              {/* Enable pointer events only when not pending/verification */}
-              <div className={`${(isEmailUpdatePending || isVerificationStep) ? "pointer-events-none" : "pointer-events-auto"}`}>
-                {message && <div className="text-green-500 text-sm text-center">{message}</div>}
-  
-                {/* Countdown */}
-                {isEmailUpdatePending && (
-                  <div className="text-center text-blue-600 font-semibold space-y-1 z-50 relative pointer-events-auto">
-                    <p>Email update in progress...</p>
-                    <p>Time remaining: {Math.floor(countdownSeconds / 60)}:{("0" + (countdownSeconds % 60)).slice(-2)}</p>
-                    <Button type="button" variant="outline" onClick={handleCancelUpdate}>
-                      Cancel Update
-                    </Button>
-                  </div>
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              {/* Disable form elements if email update is pending or verification is needed */}
+              <div className={`${(isEmailUpdatePending || isVerificationStep) ? "pointer-events-none opacity-60" : "pointer-events-auto"}`}>
+
+                {/* ERROR ALERT (for general errors) */}
+                {error && (
+                  <Alert className="border-red-200 bg-red-50 text-red-800 mb-4">
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
                 )}
 
-                {/* Verification Step */}
-                {isVerificationStep && (
-                  <div className="text-center text-red-600 font-semibold space-y-2 z-50 relative pointer-events-auto">
-                    <p>Please verify your new email. Do not close page yet</p>
-                  </div>
+                {/* SUCCESS/UNSUCCESSFUL MESSAGE */}
+                {message && (
+                  <Alert
+                    className={
+                      message.startsWith("Unsuccessful:")
+                        ? "border-red-200 bg-red-50 text-red-800 mb-4"
+                        : "border-green-200 bg-green-50 text-green-800 mb-4"
+                    }
+                  >
+                    <AlertTitle>
+                      {message.startsWith("Unsuccessful:") ? "Unsuccessful" : "Success"}
+                    </AlertTitle>
+                    <AlertDescription>
+                      {message.startsWith("Unsuccessful:") ? message.replace("Unsuccessful: ", "") : message}
+                    </AlertDescription>
+                  </Alert>
                 )}
-  
-                {/* The rest of your profile form unchanged */}
+
+                {/* Profile Form (Disabled via parent div opacity/pointer-events) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Left Column */}
                   <div className="space-y-4">
@@ -296,10 +299,9 @@ export function StaffProfile() {
                       />
                     </div>
                   </div>
-  
+
                   {/* Right Column */}
                   <div className="space-y-4">
-                    {/* Address field only visible if NOT staff */}
                     {profile.userType !== "staff" && (
                       <div className="space-y-2">
                         <Label htmlFor="address">Residence Address</Label>
@@ -317,7 +319,11 @@ export function StaffProfile() {
                     {profile.userType === "staff" && (
                       <div className="space-y-2">
                         <Label htmlFor="maintenanceType">Maintenance Area</Label>
-                        <Select value={profile.maintenanceType} disabled={!isEditing || isEmailUpdatePending || isVerificationStep}>
+                        <Select
+                          value={maintenanceType}
+                          onValueChange={(value) => setMaintenanceType(value)}
+                          disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                        >
                           <SelectTrigger>
                             <SelectValue placeholder="Select a service" />
                           </SelectTrigger>
@@ -339,10 +345,10 @@ export function StaffProfile() {
                     )}
                   </div>
                 </div>
-  
+
                 <Separator />
-  
-                {/* Conditional password change section */}
+
+                {/* Password change section */}
                 {isEditing && (
                   <div className="space-y-4">
                     <div className="flex items-center space-x-2">
@@ -355,7 +361,7 @@ export function StaffProfile() {
                       />
                       <Label htmlFor="show-password-change">Change Password?</Label>
                     </div>
-  
+
                     {showPasswordChange && (
                       <div className="space-y-4">
                         <Separator />
@@ -403,11 +409,11 @@ export function StaffProfile() {
                     )}
                   </div>
                 )}
-  
+
                 {/* Action Buttons */}
                 <div className="flex justify-end space-x-2">
                   {!isEmailUpdatePending && !isVerificationStep && (
-                    <Button type="button" variant="outline" onClick={() => setIsEditing(!isEditing)}>
+                    <Button type="button" variant="outline" onClick={() => { setIsEditing(!isEditing); setError(null); setMessage(null); }}>
                       {isEditing ? "Cancel" : "Edit Profile"}
                     </Button>
                   )}
@@ -418,10 +424,124 @@ export function StaffProfile() {
                   )}
                 </div>
               </div>
-          </form>
-        </CardContent>
-      </Card>
+            </form>
+          </CardContent>
+        </Card>
+        
+        {/* Email Update Progress Message - Displayed on top of the form when pending/verifying */}
+        {(isEmailUpdatePending || isVerificationStep) && (
+          <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+            <Card className="p-6 text-center border-blue-400 shadow-xl max-w-sm w-full pointer-events-auto">
+              {isEmailUpdatePending && (
+                <>
+                  <div className="flex justify-center mb-4 text-blue-600">
+                    <LoadingSpinner />
+                  </div>
+                  <h3 className="text-xl font-bold text-blue-600">Email Update in Progress...</h3>
+                  <p className="mt-2 text-lg font-semibold text-gray-700">
+                    Please wait. Do not close this page.
+                  </p>
+                </>
+              )}
+              {isVerificationStep && (
+                <>
+                  <h3 className="text-xl font-bold text-green-600">Verification Link Sent!</h3>
+                  <p className="mt-2 text-lg font-semibold text-gray-700">
+                    You have successfully started the email change.
+                  </p>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Please check your new email address **{email}** for a verification link. You will be logged out now.
+                  </p>
+                </>
+              )}
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Email Update Confirmation Dialog */}
+      <Dialog open={showEmailConfirmDialog} onOpenChange={() => setShowEmailConfirmDialog(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              Confirm Email Update
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to change your email to **{email}**? This action will trigger verification and **log you out**.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setShowEmailConfirmDialog(false)} disabled={isLoading}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                setError(null)
+                setMessage(null)
+                setIsLoading(true)
+                setShowEmailConfirmDialog(false); // Close dialog
+                
+                // **STEP 1: Initiate Email Update Pending State (Loading/Delay)**
+                setIsEmailUpdatePending(true);
+                
+                try {
+                  const res = await fetch("http://localhost:5229/Profile/update", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({ name, surname, email, phone, address, maintenanceType, sendEmailVerification: true }),
+                  })
+
+                  const data = await res.json()
+
+                  if (!res.ok) {
+                    // **Failure Handler**
+                    if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
+                    setIsEmailUpdatePending(false); // Stop pending state
+                    
+                    if (data?.error?.includes("EMAIL_EXISTS")) {
+                      setMessage("Unsuccessful: This email already exists.")
+                    } else {
+                      setError(data?.error || "Failed to update email.")
+                    }
+                  } else {
+                    // **Success Handler**
+                    setIsEditing(false)
+                    
+                    // Set the 6-second delay before showing the verification message/logging out
+                    apiDelayRef.current = setTimeout(() => {
+                        setIsEmailUpdatePending(false); // Remove loading screen
+                        setIsVerificationStep(true); // Show verification message
+                        
+                        // Log out after a short pause (e.g., 3 seconds) for the user to read the message
+                        setTimeout(() => {
+                            signOut(auth).then(() => {
+                                window.location.href = "/"
+                            })
+                        }, 3000); 
+                        
+                    }, 6000); // **6-second delay as requested**
+                  }
+                } catch (err: any) {
+                  // **Error Handler**
+                  if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
+                  setIsEmailUpdatePending(false); // Stop pending state
+                  setError(err.message)
+                } finally {
+                  setIsLoading(false)
+                }
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? "Updating..." : "Confirm"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
-    </div>
-  )
+  );
+
 }

@@ -96,12 +96,12 @@ public async Task<IActionResult> UpdateProfile([FromBody] UserDto userProfileUpd
         if (!decodedToken.Claims.TryGetValue("email", out object? emailObj) || emailObj == null)
             return Unauthorized(new { error = "Token does not contain an email." });
 
-        string tokenEmail = emailObj.ToString()!;
+        string oldEmail = emailObj.ToString()!;
         var usersCollection = _firestoreDb.Collection("users");
-        var querySnapshot = await usersCollection.WhereEqualTo("Email", tokenEmail).GetSnapshotAsync();
+        var querySnapshot = await usersCollection.WhereEqualTo("Email", oldEmail).GetSnapshotAsync();
 
         if (querySnapshot.Count == 0)
-            return NotFound(new { error = $"User with email '{tokenEmail}' not found in Firestore." });
+            return NotFound(new { error = $"User with email '{oldEmail}' not found in Firestore." });
 
         var userDoc = querySnapshot.Documents[0];
         var updateData = new Dictionary<string, object>();
@@ -113,20 +113,23 @@ public async Task<IActionResult> UpdateProfile([FromBody] UserDto userProfileUpd
         if (!string.IsNullOrEmpty(userProfileUpdate.Address)) updateData["Address"] = userProfileUpdate.Address;
         if (!string.IsNullOrEmpty(userProfileUpdate.MaintenanceType)) updateData["MaintenanceType"] = userProfileUpdate.MaintenanceType;
 
+        string newEmail = oldEmail;
+
         // Update email and generate new password if email changed
-        if (!string.IsNullOrEmpty(userProfileUpdate.Email) && userProfileUpdate.Email != tokenEmail)
+        if (!string.IsNullOrEmpty(userProfileUpdate.Email) && userProfileUpdate.Email != oldEmail)
         {
-            string newPassword = GenerateRandomPassword(12); // Generate strong temporary password
+            newEmail = userProfileUpdate.Email;
+            string newPassword = GenerateRandomPassword(12);
 
             // Update Firebase Auth
             await FirebaseAuth.DefaultInstance.UpdateUserAsync(new FirebaseAdmin.Auth.UserRecordArgs
             {
                 Uid = decodedToken.Uid,
-                Email = userProfileUpdate.Email,
+                Email = newEmail,
                 Password = newPassword
             });
 
-            updateData["Email"] = userProfileUpdate.Email;
+            updateData["Email"] = newEmail;
 
             // Send new password to updated email
             using (var client = new SmtpClient("smtp.gmail.com", 587))
@@ -141,18 +144,33 @@ public async Task<IActionResult> UpdateProfile([FromBody] UserDto userProfileUpd
                     Body = $"Hello {userProfileUpdate.Name},<br/><br/>Your email was updated. Here is your new temporary password:<br/><strong>{newPassword}</strong><br/><br/>Please log in and change it immediately.",
                     IsBodyHtml = true
                 };
-                mailMessage.To.Add(userProfileUpdate.Email);
-
+                mailMessage.To.Add(newEmail);
                 await client.SendMailAsync(mailMessage);
             }
         }
 
-        if (updateData.Count == 0)
-            return BadRequest(new { error = "No fields provided to update." });
+        if (updateData.Count > 0)
+            await userDoc.Reference.UpdateAsync(updateData);
 
-        await userDoc.Reference.UpdateAsync(updateData);
+        // --- NEW: Update all issues where DriverEmail == oldEmail ---
+        var issuesQuery = _firestoreDb.Collection("issues").WhereEqualTo("DriverEmail", oldEmail);
+        var issuesSnapshot = await issuesQuery.GetSnapshotAsync();
 
-        return Ok(new { message = "Profile updated successfully. If your email was changed, a new password has been sent." });
+        foreach (var issueDoc in issuesSnapshot.Documents)
+        {
+            var issueUpdate = new Dictionary<string, object>
+            {
+                ["DriverEmail"] = newEmail,
+                ["DriverName"] = userProfileUpdate.Name ?? userDoc.GetValue<string>("Name"),
+                ["DriverSurname"] = userProfileUpdate.Surname ?? userDoc.GetValue<string>("Surname"),
+                ["DriverPhone"] = userProfileUpdate.Phone ?? userDoc.GetValue<string>("Phone"),
+                ["DriverAddress"] = userProfileUpdate.Address ?? userDoc.GetValue<string>("Address")
+            };
+
+            await issueDoc.Reference.UpdateAsync(issueUpdate);
+        }
+
+        return Ok(new { message = "Profile updated successfully. All assigned issues have been updated accordingly." });
     }
     catch (FirebaseAuthException ex)
     {
@@ -163,6 +181,7 @@ public async Task<IActionResult> UpdateProfile([FromBody] UserDto userProfileUpd
         return StatusCode(500, new { error = "Internal server error: " + ex.Message });
     }
 }
+
 
 // Helper function to generate a strong random password
 private string GenerateRandomPassword(int length = 12)
