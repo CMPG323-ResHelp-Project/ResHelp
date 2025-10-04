@@ -1,6 +1,0 @@
-{
-  "/manager/dashboard/page": "app/manager/dashboard/page.js",
-  "/manager/issues/page": "app/manager/issues/page.js",
-  "/manager/analytics/page": "app/manager/analytics/page.js",
-  "/manager/staff/page": "app/manager/staff/page.js"
-}
