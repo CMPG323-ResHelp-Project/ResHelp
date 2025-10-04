@@ -507,5 +507,5 @@ yarn-error.log*
 /build
 
 # next.js
-/.next/
-/out/
+.next/
+out/
