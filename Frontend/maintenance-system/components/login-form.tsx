@@ -27,73 +27,86 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    setError(null);
-
+    setError(null)
+  
     if (!userType) {
-      setError("Please select your role before signing in.");
+      alert("Please select your role before signing in.");
       return;
     }
-
-    setIsLoading(true);
-
+  
+    setIsLoading(true)
+  
     try {
-      const userCredential = await signInWithEmailAndPassword(auth, email, password);
-      const user = userCredential.user;
-      const idToken = await user.getIdToken();
-
-      // Convert userType to lowercase here
-      const loginUserType = userType.toLowerCase();
-
+      if (userType === "manager") {
+        // 🔑 For managers: bypass Firebase
+        const response = await fetch("http://localhost:5229/Login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            email,
+            password,
+            userType: "manager"
+          })
+        })
+  
+        if (!response.ok) {
+          const errorData = await response.json()
+          throw new Error(errorData.error || "Manager login failed.")
+        }
+  
+        const data = await response.json()
+        router.push("/manager/dashboard")
+        return
+      }
+  
+      // 🔑 Normal Firebase flow for students/staff
+      const userCredential = await signInWithEmailAndPassword(auth, email, password)
+      const user = userCredential.user
+  
+      if (!user.emailVerified) {
+        setError("Please verify your email before logging in.")
+        setIsLoading(false)
+        return
+      }
+  
+      const idToken = await user.getIdToken()
+      const loginUserType = userType.toLowerCase()
+  
       const response = await fetch("http://localhost:5229/Login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          email: user.email, 
-          userType: loginUserType, // Send the lowercase version
-          idToken: idToken 
+        body: JSON.stringify({
+          email: user.email,
+          userType: loginUserType,
+          idToken: idToken
         })
-      });
-
+      })
+  
       if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.error || "Login failed on the server.");
+        const errorData = await response.json()
+        throw new Error(errorData.error || "Login failed on the server.")
       }
-
-      const data = await response.json();
-      console.log("Backend response:", data);
-
-      switch (data.userType) {
+  
+      const data = await response.json()
+  
+      switch (data.userType.toLowerCase()) {
         case "student":
-          router.push("/student/dashboard");
-          break;
+          router.push("/student/dashboard")
+          break
         case "staff":
-          router.push("/staff/dashboard");
-          break;
-        case "manager":
-          router.push("/manager/dashboard");
-          break;
+          router.push("/staff/dashboard")
+          break
         default:
-          setError("User role not recognized.");
-          break;
+          alert("User role not recognized.")
+          break
       }
-
     } catch (err: any) {
-      console.error("Login error:", err);
-      if (err.code) {
-        if (err.code === "auth/invalid-credential" || err.code === "auth/wrong-password") {
-          setError("Incorrect email, password, or user role.");
-        } else if (err.code === "auth/user-not-found") {
-          setError("No user found with this email.");
-        } else {
-          setError(err.message);
-        }
-      } else {
-        setError(err.message);
-      }
+      console.error("Login error:", err)
+      alert(err.message)
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   return (
     <div className="space-y-6">
@@ -171,5 +184,5 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
         </CardContent>
       </Card>
     </div>
-  )
+  );
 }
