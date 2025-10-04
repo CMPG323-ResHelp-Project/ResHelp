@@ -16,17 +16,88 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Download, TrendingUp, TrendingDown, BarChart3, Calendar, AlertTriangle } from "lucide-react"
 
+type Issue = {
+  Title: string;
+  Description: string;
+  Status: "Pending" | "In-Progress" | "Resolved" | "Cancelled";
+  Priority: "High" | "Medium" | "Low";
+  Category: string; // Issue category (e.g., Plumbing, Electrical, Structural)
+  Location: string; // Specific location (e.g., House 3A, Room 204)
+  IsUrgentSafetyHazard: boolean; // Urgent safety hazard flag
+  ReportedAt: string;
+  UpdatedAt: string;
+  ReporterEmail: string;
+  Rating?: number;
+};
+
 // Extended analytics data
-const detailedTrends: any[] = []
+const detailedTrends: any[] = [{
+    date: "Building A",
+    reported: 4000,
+    resolved: 2400,
+    urgent: 2400,
+  },
+  {
+    date: "Tuesday",
+    reported: 3000,
+    resolved: 2400,
+    urgent: 2400,
+  },]
+
 const buildingPerformance: any[] = []
 const recurringIssues: any[] = []
 const resolutionTimeByCategory: any[] = []
 
-export default function DetailedAnalytics() {
+//const [detailedTrends, setDetailedTrends] = useState<any[]>([])
+//const [buildingPerformance, setBuildingPerformance] = useState<any[]>([])
+///const [recurringIssues, setRecurringIssues] = useState<any[]>([])
+//const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([])
+
+export default function ManagerStaffPage() {
+
+const [issue, setIssue] = useState<Issue[]>([]);
+const [errorMessage, setErrorMessage] = useState<string | null>(null);
+const [confirmationMessage, setConfirmationMessage] = useState<string | null>(
+  null
+);
+const [isTableLoading, setIsTableLoading] = useState(false);
+
+
+useEffect(() => {
+    const fetchIssues = async () => {
+      setErrorMessage(null);
+      setIsTableLoading(true);
+
+      try {    
+        const response = await fetch("http://localhost:5229/issues/all", {
+          method: "GET",
+        });
+  
+        if (!response.ok) {
+          const errorBody = await response.json().catch(() => ({ error: response.statusText }));
+          throw new Error(errorBody.error || `Server returned status: ${response.status}`);
+        }
+  
+        const issueList: Issue[] = await response.json();
+        console.log("Fetched issues:", issueList); 
+        setIssue(issueList);
+      } catch (err: any) {
+        console.error("API Error:", err);
+        setErrorMessage(err.message);
+      } finally {
+        setIsTableLoading(false);      }
+    };
+  
+    fetchIssues();
+  }, []);
+
+
+//export default function DetailedAnalytics() {
+function DetailedAnalytics() {
   const [timeRange, setTimeRange] = useState("7d")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const router = useRouter()
@@ -255,4 +326,5 @@ export default function DetailedAnalytics() {
       </div>
     </div>
   )
+}
 }

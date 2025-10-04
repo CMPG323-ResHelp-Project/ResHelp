@@ -11,7 +11,7 @@ using System.Collections.Generic; // Added for Dictionary use
 namespace ResHelp.Controllers
 {
     [ApiController]
-    [Route("[controller]")]
+    [Route("issues")]
     public class IssuesController : ControllerBase
     {
         private readonly FirestoreDb _firestoreDb;
