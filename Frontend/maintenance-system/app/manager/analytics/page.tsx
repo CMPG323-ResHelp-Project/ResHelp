@@ -163,6 +163,50 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
   }
 }, [issue]); 
 
+  useEffect(() => {
+    if (issue.length > 0) {
+      const inactiveStatuses = ["Resolved", "Cancelled"];
+
+      const resolvedIssues = issue.filter(i => 
+        i.ReportedAt && 
+        i.UpdatedAt &&
+        i.Status?.toUpperCase() === "RESOLVED" 
+      );
+
+      const timesByCategory = resolvedIssues.reduce((groupedTimesByCategory, currentIssue) => {
+        const category = currentIssue.Category || "Uncategorised";
+
+        if (!groupedTimesByCategory[category]) {
+          groupedTimesByCategory[category] = [];
+        }
+
+        const reportedDate = new Date(currentIssue.ReportedAt);
+        const updatedDate = new Date(currentIssue.UpdatedAt);
+        const diffInMilliseconds = updatedDate.getTime() - reportedDate.getTime();
+        
+        const diffInHours = diffInMilliseconds / (1000 * 60 * 60);
+
+        groupedTimesByCategory[category].push(diffInHours);
+
+        return groupedTimesByCategory;
+      }, {} as Record<string, number[]>);
+
+      const formattedData = Object.keys(timesByCategory).map(categoryName => {
+        const allTimes = timesByCategory[categoryName];
+        const sumOfTimes = allTimes.reduce((total, time) => total + time, 0);
+        const averageTime = sumOfTimes / allTimes.length;
+
+        return {
+          category: categoryName,
+          avgHours: Math.round(averageTime * 10) / 10,
+          trend: 'down', 
+        };
+      });
+
+      setResolutionTimeByCategory(formattedData);
+    }
+  }, [issue]); 
+
 
   const [timeRange, setTimeRange] = useState("7d")
   const [buildingFilter, setBuildingFilter] = useState("all")
