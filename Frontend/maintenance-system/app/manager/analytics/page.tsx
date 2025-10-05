@@ -137,6 +137,33 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
     }
   }, [issue]);
 
+    useEffect(() => {
+    if (issue.length > 0) {
+
+      const issuesByBuilding = issue.reduce((buildingCounts, currentIssue) => {
+
+        const buildingMatch = currentIssue.Location.match(/Building\s([A-E])|House\s\d([A-E])/i);
+        const building = buildingMatch ? buildingMatch[1]?.toUpperCase() || buildingMatch[2]?.toUpperCase() : "Unknown";
+
+        if (!buildingCounts[building]) {
+          buildingCounts[building] = 0;
+        }
+
+        buildingCounts[building]++;
+        
+        return buildingCounts;
+      }, {} as Record<string, number>);
+
+      const formattedData = Object.keys(issuesByBuilding).map(buildingName => ({
+        building: `Building ${buildingName}`,
+        issues: issuesByBuilding[buildingName],
+      }));
+
+      setBuildingPerformance(formattedData);
+    }
+  }, [issue]); 
+
+
   const [timeRange, setTimeRange] = useState("7d")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const router = useRouter()
