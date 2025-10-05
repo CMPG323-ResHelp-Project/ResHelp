@@ -89,18 +89,18 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
       >();
 
       issue.forEach((i) => {
-        const reportedDate = new Date(i.ReportedAt).toLocaleDateString();
+        const reportedDateKey = new Date(i.ReportedAt).toISOString().split('T')[0];
 
-        if (!trends.has(reportedDate)) {
-          trends.set(reportedDate, {
-            date: reportedDate,
+        if (!trends.has(reportedDateKey)) {
+          trends.set(reportedDateKey, {
+            date: reportedDateKey,
             reported: 0,
             resolved: 0,
             urgent: 0,
           });
         }
 
-        const dayData = trends.get(reportedDate)!;
+        const dayData = trends.get(reportedDateKey)!;
 
         dayData.reported += 1;
 
@@ -110,7 +110,7 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
 
         const isActive = !isInactive;
 
-       if (i.Priority === "High" && isActive) {
+       if (i.Priority.toUpperCase() === "HIGH" && isActive) {
           dayData.urgent += 1;
         }
 
