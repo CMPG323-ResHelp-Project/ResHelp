@@ -11,7 +11,7 @@ using System.Collections.Generic; // Added for Dictionary use
 namespace ResHelp.Controllers
 {
     [ApiController]
-    [Route("issues")]
+    [Route("[controller]")]
     public class IssuesController : ControllerBase
     {
         private readonly FirestoreDb _firestoreDb;
@@ -232,8 +232,6 @@ public async Task<IActionResult> ReportIssue(
                 return StatusCode(500, new { error = ex.Message });
             }
         }
-
-
 
         [HttpPost("{id}/rate")]
         public async Task<IActionResult> RateIssue(

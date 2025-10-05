@@ -23,7 +23,7 @@ import { ArrowLeft, Download, TrendingUp, TrendingDown, BarChart3, Calendar, Ale
 type Issue = {
   Title: string;
   Description: string;
-  Status: "Pending" | "In-Progress" | "Resolved" | "Cancelled";
+  Status: "Pending" | "Assigned" | "Resolved" | "Cancelled";
   Priority: "High" | "Medium" | "Low";
   Category: string; // Issue category (e.g., Plumbing, Electrical, Structural)
   Location: string; // Specific location (e.g., House 3A, Room 204)
@@ -34,20 +34,6 @@ type Issue = {
   Rating?: number;
 };
 
-// Extended analytics data
-const detailedTrends: any[] = [{
-    date: "Building A",
-    reported: 4000,
-    resolved: 2400,
-    urgent: 2400,
-  },
-  {
-    date: "Tuesday",
-    reported: 3000,
-    resolved: 2400,
-    urgent: 2400,
-  },]
-
 const buildingPerformance: any[] = []
 const recurringIssues: any[] = []
 const resolutionTimeByCategory: any[] = []
@@ -57,7 +43,7 @@ const resolutionTimeByCategory: any[] = []
 ///const [recurringIssues, setRecurringIssues] = useState<any[]>([])
 //const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([])
 
-export default function ManagerStaffPage() {
+export default function AnalyticsPage() {
 
 const [issue, setIssue] = useState<Issue[]>([]);
 const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -66,38 +52,91 @@ const [confirmationMessage, setConfirmationMessage] = useState<string | null>(
 );
 const [isTableLoading, setIsTableLoading] = useState(false);
 
+const [detailedTrends, setDetailedTrends] = useState<any[]>([]);
+const [buildingPerformance, setBuildingPerformance] = useState<any[]>([]);
+const [recurringIssues, setRecurringIssues] = useState<any[]>([]);
+const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([]);
 
-useEffect(() => {
-    const fetchIssues = async () => {
-      setErrorMessage(null);
-      setIsTableLoading(true);
-
-      try {    
-        const response = await fetch("http://localhost:5229/issues/all", {
-          method: "GET",
-        });
-  
-        if (!response.ok) {
-          const errorBody = await response.json().catch(() => ({ error: response.statusText }));
-          throw new Error(errorBody.error || `Server returned status: ${response.status}`);
+  useEffect(() => {
+      const fetchIssues = async () => {
+        setErrorMessage(null);
+        setIsTableLoading(true);
+    
+        try {
+          const response = await fetch("http://localhost:5229/issue/analytics", { method: "GET" });
+          if (!response.ok) throw new Error("Failed to fetch issues");
+    
+          const issuesList: Issue[] = await response.json();
+          console.log("Fetched issues:", issuesList);
+          setIssue(issuesList); 
+        } catch (err: any) {
+          setErrorMessage(err.message);
+        } finally {
+          setIsTableLoading(false);
         }
-  
-        const issueList: Issue[] = await response.json();
-        console.log("Fetched issues:", issueList); 
-        setIssue(issueList);
-      } catch (err: any) {
-        console.error("API Error:", err);
-        setErrorMessage(err.message);
-      } finally {
-        setIsTableLoading(false);      }
-    };
-  
-    fetchIssues();
+      };
+    
+      fetchIssues();
   }, []);
 
+  useEffect(() => {
+    if (issue.length > 0) {
+      const inactiveStatuses = ["Resolved", "Cancelled"];
 
-//export default function DetailedAnalytics() {
-function DetailedAnalytics() {
+      const trends = new Map<
+        string,
+        { date: string; reported: number; resolved: number; urgent: number }
+      >();
+
+      issue.forEach((i) => {
+        const reportedDate = new Date(i.ReportedAt).toLocaleDateString();
+
+        if (!trends.has(reportedDate)) {
+          trends.set(reportedDate, {
+            date: reportedDate,
+            reported: 0,
+            resolved: 0,
+            urgent: 0,
+          });
+        }
+
+        const dayData = trends.get(reportedDate)!;
+
+        dayData.reported += 1;
+
+        const isInactive = inactiveStatuses.some(
+          (inactiveStatus) => inactiveStatus.toUpperCase() === i.Status?.toUpperCase()
+        );
+
+        const isActive = !isInactive;
+
+       if (i.Priority === "High" && isActive) {
+          dayData.urgent += 1;
+        }
+
+        if (!isActive && i.UpdatedAt) {
+          const completionDateKey = new Date(i.UpdatedAt).toISOString().split('T')[0];
+          
+          if (!trends.has(completionDateKey)) {
+            trends.set(completionDateKey, {
+              date: completionDateKey,
+              reported: 0,
+              resolved: 0,
+              urgent: 0,
+            });
+          }
+          trends.get(completionDateKey)!.resolved += 1;
+        }
+      });
+
+      const trendsArray = Array.from(trends.values()).sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      setDetailedTrends(trendsArray);
+    }
+  }, [issue]);
+
   const [timeRange, setTimeRange] = useState("7d")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const router = useRouter()
@@ -325,6 +364,5 @@ function DetailedAnalytics() {
         </Card>
       </div>
     </div>
-  )
-}
+  );
 }
