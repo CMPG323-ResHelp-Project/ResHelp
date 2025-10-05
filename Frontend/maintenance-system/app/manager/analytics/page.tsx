@@ -26,7 +26,7 @@ type Issue = {
   Status: "Pending" | "Assigned" | "Resolved" | "Cancelled";
   Priority: "High" | "Medium" | "Low";
   Category: string; // Issue category (e.g., Plumbing, Electrical, Structural)
-  Location: string; // Specific location (e.g., House 3A, Room 204)
+  Location: string; // Specific location (e.g., House 2E, Room 204)
   IsUrgentSafetyHazard: boolean; // Urgent safety hazard flag
   ReportedAt: string;
   UpdatedAt: string;
@@ -137,31 +137,31 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
     }
   }, [issue]);
 
-    useEffect(() => {
-    if (issue.length > 0) {
+  useEffect(() => {
+  if (issue.length > 0) {
 
-      const issuesByBuilding = issue.reduce((buildingCounts, currentIssue) => {
+    const issuesByBuilding = issue.reduce((buildingCounts, currentIssue) => {
 
-        const buildingMatch = currentIssue.Location.match(/Building\s([A-E])|House\s\d([A-E])/i);
-        const building = buildingMatch ? buildingMatch[1]?.toUpperCase() || buildingMatch[2]?.toUpperCase() : "Unknown";
+      const buildingMatch = currentIssue.Location.match(/Building\s([A-E])/i);
+      const building = buildingMatch ? buildingMatch[1]?.toUpperCase() : "Unknown";
 
-        if (!buildingCounts[building]) {
-          buildingCounts[building] = 0;
-        }
+      if (!buildingCounts[building]) {
+        buildingCounts[building] = 0;
+      }
 
-        buildingCounts[building]++;
-        
-        return buildingCounts;
-      }, {} as Record<string, number>);
+      buildingCounts[building]++;
+      
+      return buildingCounts;
+    }, {} as Record<string, number>);
 
-      const formattedData = Object.keys(issuesByBuilding).map(buildingName => ({
-        building: `Building ${buildingName}`,
-        issues: issuesByBuilding[buildingName],
-      }));
+    const formattedData = Object.keys(issuesByBuilding).map(buildingName => ({
+      building: `Building ${buildingName}`,
+      issues: issuesByBuilding[buildingName],
+    }));
 
-      setBuildingPerformance(formattedData);
-    }
-  }, [issue]); 
+    setBuildingPerformance(formattedData);
+  }
+}, [issue]); 
 
 
   const [timeRange, setTimeRange] = useState("7d")
