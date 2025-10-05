@@ -207,6 +207,42 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
     }
   }, [issue]); 
 
+    useEffect(() => {
+    if (issue.length > 0) {
+      
+      const issuesByTitle = issue.reduce((groupedIssues, currentIssue) => {
+        const title = currentIssue.Title.trim();
+
+        if (!groupedIssues[title]) {
+          groupedIssues[title] = {
+            issue: title,
+            occurrences: 0,
+            buildings: new Set<string>(),
+          };
+        }
+
+        groupedIssues[title].occurrences += 1;
+
+        const buildingMatch = currentIssue.Location.match(/Building\s([A-E])|House\s\d([A-E])/i);
+        const building = buildingMatch ? buildingMatch[1]?.toUpperCase() || buildingMatch[2]?.toUpperCase() : "Unknown";
+        
+        groupedIssues[title].buildings.add(building);
+
+        return groupedIssues;
+      }, {} as Record<string, { issue: string; occurrences: number; buildings: Set<string> }>);
+
+      const formattedData = Object.values(issuesByTitle)
+        .filter(item => item.occurrences > 1)
+        .map(item => ({
+          ...item,
+          buildings: Array.from(item.buildings),
+        }));
+
+      const sortedData = formattedData.sort((a, b) => b.occurrences - a.occurrences);
+
+      setRecurringIssues(sortedData);
+    }
+  }, [issue]);
 
   const [timeRange, setTimeRange] = useState("7d")
   const [buildingFilter, setBuildingFilter] = useState("all")
