@@ -22,6 +22,7 @@ namespace ResHelp.Controllers
         }
 
 
+
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateIssueStatus(
                 string id,
