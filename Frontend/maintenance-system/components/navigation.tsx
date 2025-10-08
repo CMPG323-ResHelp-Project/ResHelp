@@ -683,18 +683,17 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
               </>
             )}
 
-            {/* Fixed Footer Content (Shown only when viewing a specific topic) */}
-            {(helpTopic !== "default") && (
-              <div className="border-t pt-4 space-y-2">
-                <h4 className="font-medium">Still need help?</h4>
-                <Button className="w-full">
-                  Go to Full Knowledge Base
-                </Button>
-                <Button variant="link" className="w-full justify-center text-sm">
-                  Contact System Support
-                </Button>
-              </div>
-            )}
+            {/* {(helpTopic !== "default") && (
+            <div className="border-t pt-4 space-y-2">
+              <h4 className="font-medium">Still need help?</h4>
+              <Button className="w-full">
+                Go to Full Knowledge Base
+              </Button>
+              <Button variant="link" className="w-full justify-center text-sm">
+                Contact System Support
+              </Button>
+            </div>
+          )} */}
 
           </div>
         </SheetContent>
