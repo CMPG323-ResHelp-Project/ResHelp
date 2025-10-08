@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { LoginForm } from "@/components/login-form"
 import { RegisterForm } from "@/components/register-form"
 import { Button } from "@/components/ui/button"
-import { ForgotPasswordForm } from "@/components/forgot-password-form" // import your forgot password form
+import { ForgotPasswordForm } from "@/components/forgot-password-form" 
 import Link from "next/link"
 
 const testimonials = [
