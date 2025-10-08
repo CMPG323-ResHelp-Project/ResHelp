@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 namespace ResHelp.Controllers
@@ -19,7 +20,127 @@ namespace ResHelp.Controllers
             this._firestoreDb = firestoreDb;
         }
 
-        [HttpGet("overview")]
+            [HttpGet("detailed")]
+            public async Task<IActionResult> GetDetailedAnalytics([FromQuery] string timeRange = "7d", [FromQuery] string building = "all")
+            {
+                var issuesCollection = _firestoreDb.Collection("issues");
+                var snapshot = await issuesCollection.GetSnapshotAsync();
+
+                var allIssues = snapshot.Documents.Select(doc => {
+                    var data = doc.ToDictionary();
+
+                    T GetValue<T>(string key)
+                    {
+                        if (data.TryGetValue(key, out var value) && value is T typedValue)
+                        {
+                            return typedValue;
+                        }
+                        return default(T);
+                    }
+                    return new Issue
+                    {
+                        Title = GetValue<string>("Title") ?? "",
+                        Status = GetValue<string>("Status") ?? "",
+                        Priority = GetValue<string>("Priority") ?? "",
+                        Category = GetValue<string>("Category") ?? "Uncategorised",
+                        Location = GetValue<string>("Location") ?? "",
+                        ReportedAt = GetValue<Timestamp>("ReportedAt"),
+                        UpdatedAt = GetValue<Timestamp>("UpdatedAt")
+                    };
+                }).Where(i => i.ReportedAt != default(Timestamp)).ToList();
+
+                var now = DateTime.UtcNow;
+                var startDate = now;
+                switch (timeRange)
+                {
+                    case "7d": startDate = now.AddDays(-7); break;
+                    case "30d": startDate = now.AddDays(-30); break;
+                    case "90d": startDate = now.AddMonths(-3); break;
+                    case "1y": startDate = now.AddYears(-1); break;
+                }
+                var filteredIssues = allIssues.Where(i => i.ReportedAt.ToDateTime() >= startDate).ToList();
+
+                if (building != "all")
+                {
+                    filteredIssues = filteredIssues.Where(i => {
+                        var match = Regex.Match(i.Location, @"Building\s([A-E])", RegexOptions.IgnoreCase);
+                        return match.Success && match.Groups[1].Value.Equals(building, StringComparison.OrdinalIgnoreCase);
+                    }).ToList();
+                }
+
+                // Daily Issue Trends
+                var trends = new Dictionary<string, (int reported, int resolved, int urgent)>();
+                string[] inactiveStatuses = { "RESOLVED", "CANCELLED" };
+
+                foreach (var issue in filteredIssues)
+                {
+                    var reportedDateKey = issue.ReportedAt.ToDateTime().ToString("yyyy-MM-dd");
+                    if (!trends.ContainsKey(reportedDateKey)) trends[reportedDateKey] = (0, 0, 0);
+                    trends[reportedDateKey] = (trends[reportedDateKey].reported + 1, trends[reportedDateKey].resolved, trends[reportedDateKey].urgent);
+
+                    bool isActive = !inactiveStatuses.Contains(issue.Status?.ToUpper());
+                    if (issue.Priority?.ToUpper() == "HIGH" && isActive)
+                    {
+                        trends[reportedDateKey] = (trends[reportedDateKey].reported, trends[reportedDateKey].resolved, trends[reportedDateKey].urgent + 1);
+                    }
+
+                    if (!isActive && issue.UpdatedAt != default(Timestamp))
+                    {
+                        var resolvedDateKey = issue.UpdatedAt.ToDateTime().ToString("yyyy-MM-dd");
+                        if (!trends.ContainsKey(resolvedDateKey)) trends[resolvedDateKey] = (0, 0, 0);
+                        trends[resolvedDateKey] = (trends[resolvedDateKey].reported, trends[resolvedDateKey].resolved + 1, trends[resolvedDateKey].urgent);
+                    }
+                }
+                var detailedTrends = trends.Select(kvp => new { date = kvp.Key, reported = kvp.Value.reported, resolved = kvp.Value.resolved, urgent = kvp.Value.urgent })
+                                           .OrderBy(t => t.date);
+
+                // Building Performance
+                var buildingPerformance = filteredIssues
+                    .GroupBy(i => {
+                        var match = Regex.Match(i.Location, @"Building\s([A-E])", RegexOptions.IgnoreCase);
+                        return match.Success ? $"Building {match.Groups[1].Value.ToUpper()}" : "Building Unknown";
+                    })
+                    .Select(g => new { building = g.Key, issues = g.Count() });
+
+                // Resolution Time By Category
+                var resolutionTimeByCategory = filteredIssues
+                    .Where(i => i.Status?.ToUpper() == "RESOLVED" && i.UpdatedAt != default(Timestamp))
+                    .GroupBy(i => i.Category)
+                    .Select(g => {
+                        var avgHours = g.Average(i => (i.UpdatedAt.ToDateTime() - i.ReportedAt.ToDateTime()).TotalHours);
+                        return new
+                        {
+                            category = g.Key,
+                            avgHours = Math.Round(avgHours, 1),
+                            trend = "down" 
+                        };
+                    });
+
+                // Recurring Issues Analysis
+                var recurringIssues = filteredIssues
+                    .GroupBy(i => i.Title.Trim())
+                    .Where(g => g.Count() > 1)
+                    .Select(g => new {
+                        issue = g.Key,
+                        occurrences = g.Count(),
+                        buildings = g.Select(i => {
+                            var match = Regex.Match(i.Location, @"Building\s([A-E])", RegexOptions.IgnoreCase);
+                            return match.Success ? match.Groups[1].Value.ToUpper() : "Unknown";
+                        }).Distinct().ToList()
+                    })
+                    .OrderByDescending(i => i.occurrences);
+
+
+                return Ok(new
+                {
+                    detailedTrends,
+                    buildingPerformance,
+                    resolutionTimeByCategory,
+                    recurringIssues
+                });
+            }
+
+            [HttpGet("overview")]
         public async Task<IActionResult> GetOverviewStats()
         {
             var issuesCollection = _firestoreDb.Collection("issues");
@@ -161,3 +282,14 @@ namespace ResHelp.Controllers
         }
     }
 }
+
+    internal class Issue
+    {
+        public string Title { get; set; }
+        public string Status { get; set; }
+        public string Priority { get; set; }
+        public string Category { get; set; }
+        public string Location { get; set; }
+        public Timestamp ReportedAt { get; set; }
+        public Timestamp UpdatedAt { get; set; }
+    }

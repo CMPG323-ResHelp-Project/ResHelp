@@ -3,15 +3,12 @@
 import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   BarChart,
   Bar,
-  LineChart,
-  Line,
-  PieChart,
-  Pie,
-  Cell,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -19,167 +16,232 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
-import { TrendingUp, Clock, CheckCircle, AlertTriangle, Users, Calendar, BarChart3 } from "lucide-react"
-import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
+import { useRouter } from "next/navigation"
+import { ArrowLeft, Download, TrendingUp, TrendingDown, BarChart3, Calendar, AlertTriangle } from "lucide-react"
 
-type Issue = {
-  Title: string;
-  Description: string;
-  Status: "Pending" | "Assigned" | "Resolved" | "Cancelled";
-  Priority: "High" | "Medium" | "Low";
-  Category: string;
-  Location: string;
-  IsUrgentSafetyHazard: boolean;
-  ReportedAt: string;
-  UpdatedAt: string;
-  ReporterEmail: string;
-  Rating?: number;
-};
 
-export default function ManagerDashboard() {
+export default function AnalyticsPage() {
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // State for the data, which now comes directly from the API
+  const [detailedTrends, setDetailedTrends] = useState<any[]>([]);
+  const [buildingPerformance, setBuildingPerformance] = useState<any[]>([]);
+  const [recurringIssues, setRecurringIssues] = useState<any[]>([]);
+  const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([]);
+
+  // State for the filters
+  const [timeRange, setTimeRange] = useState("7d")
+  const [buildingFilter, setBuildingFilter] = useState("all")
   const router = useRouter()
 
-  const [overviewStats, setOverviewStats] = useState({ totalIssues: 0, resolvedIssues: 0, avgResponseTime: "N/A", avgResolutionTime: "N/A", studentSatisfaction: 0, activeStaff: 0 });
-  const [monthlyTrends, setMonthlyTrends] = useState<any[]>([]);
-  const [categoryData, setCategoryData] = useState<any[]>([]);
-  const [responseTimeData, setResponseTimeData] = useState<any[]>([]);
-  const [staffPerformance, setStaffPerformance] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-
+  // This single useEffect now handles all data fetching
   useEffect(() => {
-    const fetchDashboardData = async () => {
-      setIsLoading(true);
-      try {
-        const [ overviewRes, trendsRes, categoryRes, responseTimeRes, staffRes ] = await Promise.all([
-          fetch("http://localhost:5229/analytics/overview"),
-          fetch("http://localhost:5229/analytics/monthly-trends"),
-          fetch("http://localhost:5229/analytics/categories"),
-          fetch("http://localhost:5229/analytics/response-times"),
-          fetch("http://localhost:5229/analytics/staff-performance"),
-        ]);
+      const fetchAnalyticsData = async () => {
+        setErrorMessage(null);
+        setIsLoading(true);
+    
+        try {
+          // Construct the URL with query parameters
+          const url = `http://localhost:5229/analytics/detailed?timeRange=${timeRange}&building=${buildingFilter}`;
+          const response = await fetch(url, { method: "GET" });
+          
+          if (!response.ok) {
+            throw new Error(`Failed to fetch analytics data. Status: ${response.status}`);
+          }
+    
+          const data = await response.json();
+          console.log("Fetched analytics data:", data);
+          
+          // Set all state variables from the single API response
+          setDetailedTrends(data.detailedTrends || []);
+          setBuildingPerformance(data.buildingPerformance || []);
+          setResolutionTimeByCategory(data.resolutionTimeByCategory || []);
+          setRecurringIssues(data.recurringIssues || []);
 
-        if (overviewRes.ok) setOverviewStats(await overviewRes.json());
-        if (trendsRes.ok) setMonthlyTrends(await trendsRes.json());
-        if (responseTimeRes.ok) setResponseTimeData(await responseTimeRes.json());
-        if (staffRes.ok) setStaffPerformance(await staffRes.json());
-
-        if (categoryRes.ok) {
-          const categoryRawData = await categoryRes.json();
-          const categoryColors = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#3b82f6"];
-          setCategoryData(categoryRawData.map((entry: any, index: number) => ({
-            ...entry,
-            color: categoryColors[index % categoryColors.length],
-          })));
+        } catch (err: any) {
+          setErrorMessage(err.message);
+          // Clear data on error
+          setDetailedTrends([]);
+          setBuildingPerformance([]);
+          setResolutionTimeByCategory([]);
+          setRecurringIssues([]);
+        } finally {
+          setIsLoading(false);
         }
-      } catch (err: any) {
-        console.error("Error fetching dashboard data:", err.message);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-    fetchDashboardData();
-  }, []);
+      };
+    
+      fetchAnalyticsData();
+  }, [timeRange, buildingFilter]); // Re-fetch whenever a filter changes
+
+  const getTrendIcon = (trend: string) => {
+    switch (trend) {
+      case "up":
+        return <TrendingUp className="h-4 w-4 text-red-500" />
+      case "down":
+        return <TrendingDown className="h-4 w-4 text-green-500" />
+      default:
+        return <div className="h-4 w-4" />
+    }
+  }
+
+  // The JSX remains largely the same, but you can add loading states
+  // I've updated the "No data" messages to be more specific to the filters
 
   return (
     <div className="min-h-screen bg-background">
-      <Navigation userType="manager" currentPage="/manager/dashboard" />
+      <Navigation userType="manager" currentPage="/manager/analytics" />
+
       <div className="max-w-7xl mx-auto p-6">
         <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-2xl font-bold text-foreground">Analytics Dashboard</h1>
-            <p className="text-muted-foreground">Comprehensive maintenance management insights</p>
+          <div className="flex items-center space-x-4">
+            <Button
+              variant="outline"
+              onClick={() => router.push("/manager/dashboard")}
+              className="flex items-center space-x-2"
+            >
+              <ArrowLeft className="h-4 w-4" />
+              <span>Back to Dashboard</span>
+            </Button>
+            <div>
+              <h1 className="text-2xl font-bold text-foreground">Detailed Analytics</h1>
+              <p className="text-muted-foreground">In-depth maintenance management insights</p>
+            </div>
           </div>
-          <Button onClick={() => router.push("/manager/analytics")} className="flex items-center space-x-2">
-            <BarChart3 className="h-4 w-4" /> <span>Detailed Analytics</span>
+          <Button className="flex items-center space-x-2">
+            <Download className="h-4 w-4" />
+            <span>Export Report</span>
           </Button>
         </div>
 
-        {/* Overview Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
-            <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Calendar className="h-5 w-5 text-blue-600" /><div><p className="text-sm text-muted-foreground">Total Issues</p><p className="text-2xl font-bold">{overviewStats.totalIssues}</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><CheckCircle className="h-5 w-5 text-green-600" /><div><p className="text-sm text-muted-foreground">Resolved</p><p className="text-2xl font-bold">{overviewStats.resolvedIssues}</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Clock className="h-5 w-5 text-orange-600" /><div><p className="text-sm text-muted-foreground">Avg Response</p><p className="text-2xl font-bold">{overviewStats.avgResponseTime}</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><TrendingUp className="h-5 w-5 text-purple-600" /><div><p className="text-sm text-muted-foreground">Avg Resolution</p><p className="text-2xl font-bold">{overviewStats.avgResolutionTime}</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Users className="h-5 w-5 text-indigo-600" /><div><p className="text-sm text-muted-foreground">Satisfaction</p><p className="text-2xl font-bold">{overviewStats.studentSatisfaction > 0 ? `${overviewStats.studentSatisfaction.toFixed(1)}/5` : 'N/A'}</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><AlertTriangle className="h-5 w-5 text-cyan-600" /><div><p className="text-sm text-muted-foreground">Active Staff</p><p className="text-2xl font-bold">{overviewStats.activeStaff}</p></div></div></CardContent></Card>
-        </div>
+        {/* Filters */}
+        <Card className="mb-6">
+          <CardContent className="p-4">
+            <div className="flex items-center space-x-4">
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Time Range</label>
+                <Select value={timeRange} onValueChange={setTimeRange}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="7d">Last 7 days</SelectItem>
+                    <SelectItem value="30d">Last 30 days</SelectItem>
+                    <SelectItem value="90d">Last 3 months</SelectItem>
+                    <SelectItem value="1y">Last year</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
 
-        {/* Main Charts: Monthly Trends and Category Breakdown */}
+              <div className="space-y-1">
+                <label className="text-sm font-medium">Building</label>
+                <Select value={buildingFilter} onValueChange={setBuildingFilter}>
+                  <SelectTrigger className="w-32">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Buildings</SelectItem>
+                    <SelectItem value="a">Building A</SelectItem>
+                    <SelectItem value="b">Building B</SelectItem>
+                    <SelectItem value="c">Building C</SelectItem>
+                    <SelectItem value="d">Building D</SelectItem>
+                    <SelectItem value="e">Building E</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Daily Trends */}
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle>Daily Issue Trends</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+              <div className="h-[400px] flex items-center justify-center"><p>Loading trends...</p></div>
+            ) : detailedTrends.length === 0 ? (
+              <div className="h-[400px] flex items-center justify-center text-muted-foreground">
+                <div className="text-center">
+                  <Calendar className="h-12 w-12 mx-auto mb-4" />
+                  <p>No daily trend data available for the selected filters</p>
+                </div>
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={400}>
+                <AreaChart data={detailedTrends}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Legend />
+                  <Area type="monotone" dataKey="reported" stackId="1" stroke="#6366f1" fill="#6366f1" fillOpacity={0.6} name="Reported"/>
+                  <Area type="monotone" dataKey="resolved" stackId="2" stroke="#10b981" fill="#10b981" fillOpacity={0.6} name="Resolved"/>
+                  <Area type="monotone" dataKey="urgent" stackId="3" stroke="#ef4444" fill="#ef4444" fillOpacity={0.6} name="Urgent"/>
+                </AreaChart>
+              </ResponsiveContainer>
+            )}
+          </CardContent>
+        </Card>
+
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <Card>
-            <CardHeader><CardTitle>Monthly Issue Trends</CardTitle></CardHeader>
-            <CardContent>
-              {isLoading || monthlyTrends.length === 0 ? (<div className="h-[300px] flex items-center justify-center text-muted-foreground"><div className="text-center"><BarChart3 className="h-12 w-12 mx-auto mb-4" /><p>{isLoading ? "Loading..." : "No trend data"}</p></div></div>) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={monthlyTrends}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="month" /><YAxis /><Tooltip /><Legend /><Line type="monotone" dataKey="reported" stroke="#6366f1" name="Reported" /><Line type="monotone" dataKey="resolved" stroke="#10b981" name="Resolved" /><Line type="monotone" dataKey="pending" stroke="#f59e0b" name="Pending" /></LineChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-          <Card>
-            <CardHeader><CardTitle>Issues by Category</CardTitle></CardHeader>
-            <CardContent>
-              {isLoading || categoryData.length === 0 ? (<div className="h-[300px] flex items-center justify-center text-muted-foreground"><div className="text-center"><BarChart3 className="h-12 w-12 mx-auto mb-4" /><p>{isLoading ? "Loading..." : "No category data"}</p></div></div>) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <PieChart><Pie data={categoryData} cx="50%" cy="50%" labelLine={false} label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`} outerRadius={80} dataKey="value">{categoryData.map((entry, index) => (<Cell key={`cell-${index}`} fill={entry.color} />))}</Pie><Tooltip /><Legend /></PieChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/*Response Times and Staff Performance */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card>
-            <CardHeader><CardTitle>Response Time Distribution</CardTitle></CardHeader>
-            <CardContent>
-              {isLoading || responseTimeData.length === 0 ? (<div className="h-[300px] flex items-center justify-center text-muted-foreground"><div className="text-center"><Clock className="h-12 w-12 mx-auto mb-4" /><p>{isLoading ? "Loading..." : "No response time data"}</p></div></div>) : (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={responseTimeData}><CartesianGrid strokeDasharray="3 3" /><XAxis dataKey="timeRange" /><YAxis /><Tooltip /><Bar dataKey="count" fill="#6366f1" /></BarChart>
-                </ResponsiveContainer>
-              )}
-            </CardContent>
-          </Card>
+          {/* Building Performance */}
           <Card>
             <CardHeader>
-              <CardTitle>Staff Performance</CardTitle>
+              <CardTitle>Performance by Building</CardTitle>
             </CardHeader>
             <CardContent>
-              {isLoading || staffPerformance.length === 0 ? (
+               {isLoading ? (
+                <div className="h-[300px] flex items-center justify-center"><p>Loading performance data...</p></div>
+              ) : buildingPerformance.length === 0 ? (
                 <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                   <div className="text-center">
-                    <Users className="h-12 w-12 mx-auto mb-4" />
-                    <p>{isLoading ? "Loading data..." : "No staff performance data available yet"}</p>
+                    <BarChart3 className="h-12 w-12 mx-auto mb-4" />
+                    <p>No building performance data available for the selected filters</p>
                   </div>
                 </div>
               ) : (
-                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
-                  {staffPerformance.map((staff, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50">
+                <ResponsiveContainer width="100%" height={300}>
+                  <BarChart data={buildingPerformance}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="building" />
+                    <YAxis />
+                    <Tooltip />
+                    <Bar dataKey="issues" fill="#6366f1" name="Total Issues" />
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Resolution Time by Category */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Avg Resolution Time by Category</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading ? (
+                <div className="h-[300px] flex items-center justify-center"><p>Loading resolution times...</p></div>
+              ) : resolutionTimeByCategory.length === 0 ? (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <AlertTriangle className="h-12 w-12 mx-auto mb-4" />
+                    <p>No resolution time data available for the selected filters</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {resolutionTimeByCategory.map((item, index) => (
+                    <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg">
                       <div>
-                        <p className="font-medium">{staff.name}</p>
-                        <p className="text-sm text-muted-foreground">
-                          {staff.resolved} resolved • Avg: {staff.avgTime}
-                        </p>
+                        <p className="font-medium">{item.category}</p>
+                        <p className="text-sm text-muted-foreground">{item.avgHours} hours average</p>
                       </div>
-                      <div className="text-right">
-                        <div className="flex items-center justify-end space-x-1">
-                          <span className="text-sm font-medium">{staff.satisfaction}</span>
-                          <span className="text-xs text-muted-foreground">/ 5</span>
-                        </div>
-                        <Badge 
-                           variant="outline"
-                           className={
-                            staff.satisfaction >= 4.5 
-                            ? "border-green-500 text-green-600" 
-                            : staff.satisfaction >= 4.0 
-                            ? "border-yellow-500 text-yellow-600" 
-                            : "border-red-500 text-red-600"
-                          }
-                        >
-                          {staff.satisfaction >= 4.5 ? "Excellent" : staff.satisfaction >= 4.0 ? "Good" : "Average"}
-                        </Badge>
+                      <div className="flex items-center space-x-2">
+                        {getTrendIcon(item.trend)}
+                        <span className="text-sm font-medium">{item.avgHours}h</span>
                       </div>
                     </div>
                   ))}
@@ -188,7 +250,40 @@ export default function ManagerDashboard() {
             </CardContent>
           </Card>
         </div>
+
+        {/* Recurring Issues */}
+        <Card>
+          <CardHeader>
+            <CardTitle>Recurring Issues Analysis</CardTitle>
+          </CardHeader>
+          <CardContent>
+            {isLoading ? (
+                <div className="p-8 text-center"><p>Loading recurring issues...</p></div>
+            ) : recurringIssues.length === 0 ? (
+              <div className="p-8 text-center text-muted-foreground">
+                <AlertTriangle className="h-12 w-12 mx-auto mb-4" />
+                <h3 className="text-lg font-semibold mb-2">No recurring issues identified</h3>
+                <p>No patterns of recurring maintenance issues have been detected for the selected filters.</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {recurringIssues.map((issue, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 border border-border rounded-lg">
+                    <div>
+                      <p className="font-medium">{issue.issue}</p>
+                      <p className="text-sm text-muted-foreground">Affected buildings: {issue.buildings.join(", ")}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-2xl font-bold text-red-600">{issue.occurrences}</p>
+                      <p className="text-sm text-muted-foreground">occurrences</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     </div>
-  )
+  );
 }
