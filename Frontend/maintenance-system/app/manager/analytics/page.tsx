@@ -16,17 +16,234 @@ import {
   ResponsiveContainer,
   Legend,
 } from "recharts"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 import { ArrowLeft, Download, TrendingUp, TrendingDown, BarChart3, Calendar, AlertTriangle } from "lucide-react"
 
-// Extended analytics data
-const detailedTrends: any[] = []
+type Issue = {
+  Title: string;
+  Description: string;
+  Status: "Pending" | "Assigned" | "Resolved" | "Cancelled";
+  Priority: "High" | "Medium" | "Low";
+  Category: string; // Issue category (e.g., Plumbing, Electrical, Structural)
+  Location: string; // Specific location (e.g., House 2E, Room 204)
+  IsUrgentSafetyHazard: boolean; // Urgent safety hazard flag
+  ReportedAt: string;
+  UpdatedAt: string;
+  ReporterEmail: string;
+  Rating?: number;
+};
+
 const buildingPerformance: any[] = []
 const recurringIssues: any[] = []
 const resolutionTimeByCategory: any[] = []
 
-export default function DetailedAnalytics() {
+//const [detailedTrends, setDetailedTrends] = useState<any[]>([])
+//const [buildingPerformance, setBuildingPerformance] = useState<any[]>([])
+///const [recurringIssues, setRecurringIssues] = useState<any[]>([])
+//const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([])
+
+export default function AnalyticsPage() {
+
+const [issue, setIssue] = useState<Issue[]>([]);
+const [errorMessage, setErrorMessage] = useState<string | null>(null);
+const [confirmationMessage, setConfirmationMessage] = useState<string | null>(
+  null
+);
+const [isTableLoading, setIsTableLoading] = useState(false);
+
+const [detailedTrends, setDetailedTrends] = useState<any[]>([]);
+const [buildingPerformance, setBuildingPerformance] = useState<any[]>([]);
+const [recurringIssues, setRecurringIssues] = useState<any[]>([]);
+const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([]);
+
+  useEffect(() => {
+      const fetchIssues = async () => {
+        setErrorMessage(null);
+        setIsTableLoading(true);
+    
+        try {
+          const response = await fetch("http://localhost:5229/issue/analytics", { method: "GET" });
+          if (!response.ok) throw new Error("Failed to fetch issues");
+    
+          const issuesList: Issue[] = await response.json();
+          console.log("Fetched issues:", issuesList);
+          setIssue(issuesList); 
+        } catch (err: any) {
+          setErrorMessage(err.message);
+        } finally {
+          setIsTableLoading(false);
+        }
+      };
+    
+      fetchIssues();
+  }, []);
+
+  useEffect(() => {
+    if (issue.length > 0) {
+      const inactiveStatuses = ["Resolved", "Cancelled"];
+
+      const trends = new Map<
+        string,
+        { date: string; reported: number; resolved: number; urgent: number }
+      >();
+
+      issue.forEach((i) => {
+        const reportedDateKey = new Date(i.ReportedAt).toISOString().split('T')[0];
+
+        if (!trends.has(reportedDateKey)) {
+          trends.set(reportedDateKey, {
+            date: reportedDateKey,
+            reported: 0,
+            resolved: 0,
+            urgent: 0,
+          });
+        }
+
+        const dayData = trends.get(reportedDateKey)!;
+
+        dayData.reported += 1;
+
+        const isInactive = inactiveStatuses.some(
+          (inactiveStatus) => inactiveStatus.toUpperCase() === i.Status?.toUpperCase()
+        );
+
+        const isActive = !isInactive;
+
+       if (i.Priority.toUpperCase() === "HIGH" && isActive) {
+          dayData.urgent += 1;
+        }
+
+        if (!isActive && i.UpdatedAt) {
+          const completionDateKey = new Date(i.UpdatedAt).toISOString().split('T')[0];
+          
+          if (!trends.has(completionDateKey)) {
+            trends.set(completionDateKey, {
+              date: completionDateKey,
+              reported: 0,
+              resolved: 0,
+              urgent: 0,
+            });
+          }
+          trends.get(completionDateKey)!.resolved += 1;
+        }
+      });
+
+      const trendsArray = Array.from(trends.values()).sort(
+        (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+      );
+
+      setDetailedTrends(trendsArray);
+    }
+  }, [issue]);
+
+  useEffect(() => {
+  if (issue.length > 0) {
+
+    const issuesByBuilding = issue.reduce((buildingCounts, currentIssue) => {
+
+      const buildingMatch = currentIssue.Location.match(/Building\s([A-E])/i);
+      const building = buildingMatch ? buildingMatch[1]?.toUpperCase() : "Unknown";
+
+      if (!buildingCounts[building]) {
+        buildingCounts[building] = 0;
+      }
+
+      buildingCounts[building]++;
+      
+      return buildingCounts;
+    }, {} as Record<string, number>);
+
+    const formattedData = Object.keys(issuesByBuilding).map(buildingName => ({
+      building: `Building ${buildingName}`,
+      issues: issuesByBuilding[buildingName],
+    }));
+
+    setBuildingPerformance(formattedData);
+  }
+}, [issue]); 
+
+  useEffect(() => {
+    if (issue.length > 0) {
+      const inactiveStatuses = ["Resolved", "Cancelled"];
+
+      const resolvedIssues = issue.filter(i => 
+        i.ReportedAt && 
+        i.UpdatedAt &&
+        i.Status?.toUpperCase() === "RESOLVED" 
+      );
+
+      const timesByCategory = resolvedIssues.reduce((groupedTimesByCategory, currentIssue) => {
+        const category = currentIssue.Category || "Uncategorised";
+
+        if (!groupedTimesByCategory[category]) {
+          groupedTimesByCategory[category] = [];
+        }
+
+        const reportedDate = new Date(currentIssue.ReportedAt);
+        const updatedDate = new Date(currentIssue.UpdatedAt);
+        const diffInMilliseconds = updatedDate.getTime() - reportedDate.getTime();
+        
+        const diffInHours = diffInMilliseconds / (1000 * 60 * 60);
+
+        groupedTimesByCategory[category].push(diffInHours);
+
+        return groupedTimesByCategory;
+      }, {} as Record<string, number[]>);
+
+      const formattedData = Object.keys(timesByCategory).map(categoryName => {
+        const allTimes = timesByCategory[categoryName];
+        const sumOfTimes = allTimes.reduce((total, time) => total + time, 0);
+        const averageTime = sumOfTimes / allTimes.length;
+
+        return {
+          category: categoryName,
+          avgHours: Math.round(averageTime * 10) / 10,
+          trend: 'down', 
+        };
+      });
+
+      setResolutionTimeByCategory(formattedData);
+    }
+  }, [issue]); 
+
+    useEffect(() => {
+    if (issue.length > 0) {
+      
+      const issuesByTitle = issue.reduce((groupedIssues, currentIssue) => {
+        const title = currentIssue.Title.trim();
+
+        if (!groupedIssues[title]) {
+          groupedIssues[title] = {
+            issue: title,
+            occurrences: 0,
+            buildings: new Set<string>(),
+          };
+        }
+
+        groupedIssues[title].occurrences += 1;
+
+        const buildingMatch = currentIssue.Location.match(/Building\s([A-E])|House\s\d([A-E])/i);
+        const building = buildingMatch ? buildingMatch[1]?.toUpperCase() || buildingMatch[2]?.toUpperCase() : "Unknown";
+        
+        groupedIssues[title].buildings.add(building);
+
+        return groupedIssues;
+      }, {} as Record<string, { issue: string; occurrences: number; buildings: Set<string> }>);
+
+      const formattedData = Object.values(issuesByTitle)
+        .filter(item => item.occurrences > 1)
+        .map(item => ({
+          ...item,
+          buildings: Array.from(item.buildings),
+        }));
+
+      const sortedData = formattedData.sort((a, b) => b.occurrences - a.occurrences);
+
+      setRecurringIssues(sortedData);
+    }
+  }, [issue]);
+
   const [timeRange, setTimeRange] = useState("7d")
   const [buildingFilter, setBuildingFilter] = useState("all")
   const router = useRouter()
@@ -254,5 +471,5 @@ export default function DetailedAnalytics() {
         </Card>
       </div>
     </div>
-  )
+  );
 }

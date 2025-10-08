@@ -183,7 +183,51 @@ public async Task<IActionResult> CancelIssue(string id)
     return Ok(new { message = "Issue cancelled successfully.", id, status = "Cancelled" });
 }
 
-// --- Get All Issues ---
+[HttpGet("analytics")] 
+public async Task<IActionResult> GetAllIssuesForAnalytics()
+{
+    try
+    {
+        var issuesQuery = _firestoreDb.Collection("issues");
+        var snapshot = await issuesQuery.GetSnapshotAsync();
+
+        var issuesList = new List<Dictionary<string, object?>>();
+
+        foreach (var doc in snapshot.Documents)
+        {
+            var issueDict = new Dictionary<string, object?>();
+
+            foreach (var field in doc.ToDictionary())
+            {
+                issueDict[field.Key] = SanitizeValue(field.Value);
+            }
+            issuesList.Add(issueDict);
+        }
+
+        return Ok(issuesList);
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { error = "An internal server error occurred: " + ex.Message });
+    }
+}
+    private static object? SanitizeValue(object? value)
+    {
+        if (value is Timestamp ts)
+        {
+            return ts.ToDateTime().ToUniversalTime().ToString("o");
+        }
+
+        if (value is string s && !string.IsNullOrEmpty(s))
+        {
+            if (DateTime.TryParse(s, null, System.Globalization.DateTimeStyles.RoundtripKind, out var parsedDate))
+            {
+                return parsedDate.ToUniversalTime().ToString("o");
+            }
+        }
+        return value;
+    }
+
 [HttpGet("get")]
 public async Task<IActionResult> GetAllIssues()
 {
