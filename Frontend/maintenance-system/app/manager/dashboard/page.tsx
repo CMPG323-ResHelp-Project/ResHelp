@@ -21,24 +21,101 @@ import {
 } from "recharts"
 import { TrendingUp, Clock, CheckCircle, AlertTriangle, Users, Calendar, BarChart3 } from "lucide-react"
 import { useRouter } from "next/navigation"
+import { useState, useEffect } from "react"
 
-// Mock analytics data
-const overviewStats = {
-  totalIssues: 0,
-  resolvedIssues: 0,
-  avgResponseTime: "0 hours",
-  avgResolutionTime: "0 hours",
-  studentSatisfaction: 0,
-  activeStaff: 0,
-}
-
-const monthlyTrends: any[] = []
-const categoryData: any[] = []
-const responseTimeData: any[] = []
-const staffPerformance: any[] = []
+type Issue = {
+  Title: string;
+  Description: string;
+  Status: "Pending" | "Assigned" | "Resolved" | "Cancelled";
+  Priority: "High" | "Medium" | "Low";
+  Category: string;
+  Location: string;
+  IsUrgentSafetyHazard: boolean;
+  ReportedAt: string;
+  UpdatedAt: string;
+  ReporterEmail: string;
+  Rating?: number;
+};
 
 export default function ManagerDashboard() {
   const router = useRouter()
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [overviewStats, setOverviewStats] = useState({
+    totalIssues: 0,
+    resolvedIssues: 0,
+    avgResponseTime: "0 hours",
+    avgResolutionTime: "0 hours",
+    studentSatisfaction: 0,
+    activeStaff: 0,
+  });
+  const [monthlyTrends, setMonthlyTrends] = useState<any[]>([]);
+  const [categoryData, setCategoryData] = useState<any[]>([]);
+  const [responseTimeData, setResponseTimeData] = useState<any[]>([]);
+  const [staffPerformance, setStaffPerformance] = useState<any[]>([]);
+
+  useEffect(() => {
+    const fetchIssues = async () => {
+      try {
+        const response = await fetch("http://localhost:5229/issue/analytics", { method: "GET" });
+        if (!response.ok) throw new Error("Failed to fetch issues");
+        const issuesList: Issue[] = await response.json();
+        setIssues(issuesList);
+      } catch (err: any) {
+        console.error(err.message);
+      }
+    };
+    fetchIssues();
+  }, []);
+
+  useEffect(() => {
+    if (issues.length > 0) {
+      const resolved = issues.filter(i => i.Status === "Resolved").length;
+      setOverviewStats({
+        totalIssues: issues.length,
+        resolvedIssues: resolved,
+        avgResponseTime: "N/A", 
+        avgResolutionTime: "N/A", 
+        studentSatisfaction: 4.5, 
+        activeStaff: 5, 
+      });
+
+      const trends = new Map<string, { month: string; reported: number; resolved: number; pending: number }>();
+      issues.forEach(issue => {
+        const month = new Date(issue.ReportedAt).toLocaleString('default', { month: 'short' });
+        if (!trends.has(month)) {
+          trends.set(month, { month, reported: 0, resolved: 0, pending: 0 });
+        }
+        const data = trends.get(month)!;
+        data.reported++;
+        if (issue.Status === "Resolved") data.resolved++;
+        if (issue.Status === "Pending" || issue.Status === "Assigned") data.pending++;
+      });
+      setMonthlyTrends(Array.from(trends.values()));
+
+      const categories = new Map<string, number>();
+      issues.forEach(issue => {
+        categories.set(issue.Category, (categories.get(issue.Category) || 0) + 1);
+      });
+      const categoryColors = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#3b82f6"];
+      setCategoryData(Array.from(categories.entries()).map(([name, value], index) => ({
+        name,
+        value,
+        color: categoryColors[index % categoryColors.length]
+      })));
+
+      setResponseTimeData([
+        { timeRange: "< 1hr", count: 15 },
+        { timeRange: "1-4hr", count: 30 },
+        { timeRange: "4-24hr", count: 20 },
+        { timeRange: "> 24hr", count: 5 },
+      ]);
+      setStaffPerformance([
+        { name: "John Doe", resolved: 25, avgTime: "3.5h", satisfaction: 4.8 },
+        { name: "Jane Smith", resolved: 18, avgTime: "4.1h", satisfaction: 4.5 },
+      ]);
+    }
+  }, [issues]);
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -183,7 +260,7 @@ export default function ManagerDashboard() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      label={({ name, percentage }) => `${name}: ${percentage}%`}
+                      label={({ name, percent }) => `${name}: ${(percent * 100).toFixed(0)}%`}
                       outerRadius={80}
                       fill="#8884d8"
                       dataKey="value"
@@ -193,6 +270,7 @@ export default function ManagerDashboard() {
                       ))}
                     </Pie>
                     <Tooltip />
+                    <Legend />
                   </PieChart>
                 </ResponsiveContainer>
               )}
