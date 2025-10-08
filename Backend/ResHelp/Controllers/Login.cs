@@ -44,7 +44,7 @@ namespace ResHelp.Controllers
                         });
                     }
 
-                    return Unauthorized(new { error = "Incorrect admin email or password." });
+                    return Unauthorized(new { error = "Incorrect email or password." });
                 }
 
                 // 🔑 Step 2: Normal flow for students/staff
@@ -72,7 +72,7 @@ namespace ResHelp.Controllers
 
                 if (firestoreUserType == null || firestoreUserType.ToLower() != login.UserType.ToLower())
                 {
-                    return BadRequest(new { error = "Incorrect email, password, or user role." });
+                    return BadRequest(new { error = "Incorrect email or password."});
                 }
 
                 return Ok(new

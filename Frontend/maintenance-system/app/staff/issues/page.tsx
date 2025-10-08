@@ -14,6 +14,37 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { Trash2 } from "lucide-react"; // optional icon, can change to Check or Info
 
 // -------------------- Helper Functions --------------------
+
+/**
+ * Formats an ISO date string into the requested "YYYY/MM/DD, HH:mm:ss" format.
+ * @param dateString The ISO date/time string (e.g., "2025-10-05T17:53:46.8635690Z")
+ * @returns A formatted string, e.g., "2025/10/05, 17:53:46" or "N/A".
+ */
+const formatDateTime = (dateString: string | undefined): string => {
+  if (!dateString) return "N/A"
+  
+  try {
+    const date = new Date(dateString)
+    if (isNaN(date.getTime())) return "Invalid Date"
+
+    // Helper to add leading zero
+    const pad = (num: number): string => num.toString().padStart(2, '0')
+
+    // Get date components
+    const year = date.getFullYear()
+    const month = pad(date.getMonth() + 1) // Months are 0-indexed
+    const day = pad(date.getDate())
+    const hours = pad(date.getHours())
+    const minutes = pad(date.getMinutes())
+    const seconds = pad(date.getSeconds())
+
+    // Assemble the final format: YYYY/MM/DD, HH:mm:ss
+    return `${year}/${month}/${day}, ${hours}:${minutes}:${seconds}`
+  } catch (e) {
+    return "Error Formatting" // Fallback on parsing error
+  }
+}
+
 const getStatusIcon = (status?: string) => {
   switch (status) {
     case "pending": return <Clock className="h-4 w-4" />
@@ -56,7 +87,7 @@ interface Issue {
   room: string
   student: string
   isUrgent: boolean
-  updatedAt: string
+  updatedAt: string // This is the date we will format
 }
 
 type IssueAction = "accept" | "attend" | "resolve";
@@ -116,7 +147,7 @@ export default function StaffIssues() {
       setIssues((prev) =>
         prev.map((issue) =>
           issue.id === issueId
-            ? { ...issue, status: updatedData.status as Issue["status"], reportedAt: new Date().toISOString() } // optional: update timestamp
+            ? { ...issue, status: updatedData.status as Issue["status"], updatedAt: updatedData.UpdatedAt || new Date().toISOString() } // Use UpdatedAt from API or current time
             : issue
         )
       );
@@ -161,7 +192,7 @@ export default function StaffIssues() {
           room: issue.Location,
           student: issue.ReporterName,
           isUrgent: issue.IsUrgent,
-          updatedAt: issue.UpdatedAt,
+          updatedAt: issue.UpdatedAt, // This is the ISO string from the API
         }))
 
         setIssues(normalizedIssues)
@@ -246,7 +277,6 @@ export default function StaffIssues() {
         </Card>
 
         {/* Issues List Scrollable Container */}
-        {/* Added max-h-[60vh] for fixed height and overflow-y-auto for scrolling */}
         <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
           {filteredIssues.map((issue) => (
             <Card key={issue.id} className="hover:shadow-md transition-shadow">
@@ -274,7 +304,8 @@ export default function StaffIssues() {
                     <span>Student: {issue.student}</span>
                     <span>Location: {issue.room}</span>
                     <span>Category: {issue.category}</span>
-                    <span>Reported: {issue.updatedAt}</span>
+                    {/* 💡 FIXED DATE FORMATTING HERE */}
+                    <span>Reported: {formatDateTime(issue.updatedAt)}</span>
                   </div>
                 </div>
 
