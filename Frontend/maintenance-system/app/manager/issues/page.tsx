@@ -50,8 +50,8 @@ type Issue = {
   priority: string;
   location: string;
   isUrgent: boolean;
-  status: "Pending" | "Assigned" | "In_progress" | "Completed" | "Cancelled";
-  created_at: string; // currently, we use this, but Firestore has ReportedAt
+  status: "Pending" | "Assigned" | "Resolved" | "Cancelled";
+  ReportedAt: string; // currently, we use this, but Firestore has ReportedAt
   reporterEmail: string;
   reporterName: string;
 };
@@ -64,7 +64,7 @@ export default function ManagerIssuesPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [sortKey, setSortKey] = useState<'created_at' | 'status'>('created_at');
+  const [sortKey, setSortKey] = useState<'ReportedAt' | 'status'>('ReportedAt');
   const [selectedRequestToDelete, setSelectedRequestToDelete] = useState<number | null>(null);
   const [editingRequest, setEditingRequest] = useState<Issue | null>(null);
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
@@ -73,7 +73,6 @@ export default function ManagerIssuesPage() {
   const [issues, setIssues] = useState<Issue[]>([]);
   const [isEditLoading, setIsEditLoading] = useState(false);
   const [isAddLoading, setIsAddLoading] = useState(false);
-
   
   const [formData, setFormData] = useState({
     title: "",
@@ -189,7 +188,6 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
   }
 };
 
-
   const updateFormData = (field: string, value: string | boolean) => {
     setFormData(prev => ({ ...prev, [field]: value }));
   };
@@ -297,7 +295,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
     setTimeout(() => setConfirmationMessage(null), 3000);
   };
 
-  const toggleSortDirection = (key: 'created_at' | 'status') => {
+  const toggleSortDirection = (key: 'ReportedAt' | 'status') => {
     if (sortKey === key) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -307,15 +305,15 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
   };
 
   const getStatusColor = (status: Issue['status']) => {
-    switch (status) {
-      case "Pending": return "bg-yellow-100 text-yellow-800 border-yellow-200";
-      case "Assigned": return "bg-blue-100 text-blue-800 border-blue-200";
-      case "In_progress": return "bg-purple-100 text-purple-800 border-purple-200";
-      case "Completed": return "bg-green-100 text-green-800 border-green-200";
-      case "Cancelled": return "bg-red-100 text-red-800 border-red-200";
+    switch ((status || "").toLowerCase().replace("_","")) {
+      case "pending": return "bg-yellow-100 text-yellow-800 border-yellow-200";
+      case "assigned": return "bg-blue-100 text-blue-800 border-blue-200";
+      case "resolved": return "bg-green-100 text-green-800 border-green-200";
+      case "cancelled": return "bg-red-100 text-red-800 border-red-200";
       default: return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
+
 
   const formatDateTime = (dateString: string) => {
     if (!dateString) return "-"; // fallback for missing dates
@@ -359,12 +357,10 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
       hour: "2-digit",
       minute: "2-digit",
     });
-  }
-  
-  
+  }  
 
   const filteredRequests = issues.filter(
-    r => (selectedStatus === "All" || r.status === selectedStatus) &&
+    r => (selectedStatus === "All" || (r.status || "").toLowerCase().replace("_", " ") === selectedStatus.toLowerCase()) &&
       (
         (r.title?.toLowerCase() ?? "").includes(searchTerm.toLowerCase()) ||
         (r.category?.toLowerCase() ?? "").includes(searchTerm.toLowerCase()) ||
@@ -374,17 +370,21 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
   );
   
   const sortedRequests = [...filteredRequests].sort((a, b) => {
-    if (sortKey === 'created_at') {
-      const dateA = new Date(a.created_at).getTime();
-      const dateB = new Date(b.created_at).getTime();
+    if (sortKey === 'ReportedAt') {
+      const dateA = new Date(a.ReportedAt).getTime() || 0;
+      const dateB = new Date(b.ReportedAt).getTime() || 0;
+      
       return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
+
     } else {
-      const statusOrder = ["Pending", "Assigned", "In_progress", "Completed", "Cancelled"];
-      const statusA = statusOrder.indexOf(a.status);
-      const statusB = statusOrder.indexOf(b.status);
+      const statusOrder = ["pending", "assigned", "resolved", "cancelled"];
+      
+      const statusA = statusOrder.indexOf((a.status || "").toLowerCase().replace("_", " "));
+      const statusB = statusOrder.indexOf((b.status || "").toLowerCase().replace("_", " "));
+
       return sortDirection === 'asc' ? statusA - statusB : statusB - statusA;
-    }
-  });
+    }}
+  )
 
   return (
     <div className="min-h-screen bg-background">
@@ -499,13 +499,12 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
               <SelectItem value="All">All Statuses</SelectItem>
               <SelectItem value="Pending">Pending</SelectItem>
               <SelectItem value="Assigned">Assigned</SelectItem>
-              <SelectItem value="In_progress">In Progress</SelectItem>
-              <SelectItem value="Completed">Completed</SelectItem>
+              <SelectItem value="Resolved">Resolved</SelectItem>
               <SelectItem value="Cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => toggleSortDirection('created_at')} className="p-2">
-            Sort by Date ({sortKey === 'created_at' ? (sortDirection === 'asc' ? 'Oldest' : 'Newest') : 'Date'}) <ArrowUpDown className="ml-2 h-4 w-4" />
+          <Button variant="outline" onClick={() => toggleSortDirection('ReportedAt')} className="p-2">
+            Sort by Date ({sortKey === 'ReportedAt' ? (sortDirection === 'asc' ? 'Oldest' : 'Newest') : 'Date'}) <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         </div>
 
@@ -562,7 +561,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
 </Badge>
 
         </TableCell>
-        <TableCell>{formatDateTimeSafe(r.created_at)}</TableCell>
+        <TableCell>{formatDateTimeSafe(r.ReportedAt)}</TableCell>
         <TableCell className="flex gap-2">
   {/* Edit button */}
   <Button
