@@ -3,11 +3,13 @@ using Google.Apis.Auth.OAuth2;
 using Google.Cloud.Firestore;
 using Microsoft.AspNetCore.Mvc;
 
+
 // === Create builder ===
 var builder = WebApplication.CreateBuilder(args);
 
 // === Firebase & Firestore setup ===
-string serviceAccountPath = @"C:\Users\ASUS\Downloads\ResHelp\Backend\ResHelp\reshelp-ba48b-firebase-adminsdk-fbsvc-68be648d8b.json";
+string dir = AppContext.BaseDirectory;
+string serviceAccountPath = Path.GetFullPath(Path.Combine(dir, @"..\..\..\reshelp-ba48b-firebase-adminsdk-fbsvc-68be648d8b.json"));
 
 // Initialize Firebase Admin
 var firebaseApp = FirebaseApp.Create(new AppOptions

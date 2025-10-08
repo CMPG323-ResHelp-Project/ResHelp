@@ -21,7 +21,62 @@ namespace ResHelp.Controllers
             _firestoreDb = firestoreDb;
         }
 
-     [HttpPost("report")]
+
+
+        [HttpPut("{id}/status")]
+        public async Task<IActionResult> UpdateIssueStatus(
+                string id,
+                [FromBody] StatusUpdateDto statusUpdate,
+                [FromHeader(Name = "Authorization")] string authorization)
+        {
+            if (string.IsNullOrEmpty(authorization))
+                return Unauthorized(new { error = "Authorization header is missing." });
+
+            try
+            {
+                var idToken = authorization.Replace("Bearer ", "").Trim();
+                var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+                string userEmail = decodedToken.Claims["email"]?.ToString() ?? "";
+
+                var docRef = _firestoreDb.Collection("issues").Document(id);
+                var snapshot = await docRef.GetSnapshotAsync();
+
+                if (!snapshot.Exists)
+                    return NotFound(new { error = "Issue not found." });
+
+                var existingIssue = snapshot.ToDictionary();
+                var updates = new Dictionary<string, object>
+                {
+                    { "Status", statusUpdate.NewStatus },
+                    { "UpdatedAt", DateTime.UtcNow }
+                };
+
+                string existingStatus = existingIssue.ContainsKey("Status") ? existingIssue["Status"]?.ToString() : "";
+
+                if (existingStatus.ToLower() == "pending" && statusUpdate.NewStatus.ToLower() == "assigned")
+                {
+                    updates.Add("AssignedAt", DateTime.UtcNow);
+                }
+
+                if (statusUpdate.NewStatus.ToLower() == "resolved")
+                {
+                    updates.Add("ResolvedBy", userEmail);
+                }
+
+                await docRef.UpdateAsync(updates);
+                return Ok(new { message = $"Status updated to {statusUpdate.NewStatus}" });
+            }
+            catch (FirebaseAuthException ex)
+            {
+                return Unauthorized(new { error = "Invalid token: " + ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
+        }
+
+        [HttpPost("report")]
 public async Task<IActionResult> ReportIssue(
     [FromBody] IssueDto issue,
     [FromHeader(Name = "Authorization")] string authorization)
@@ -232,8 +287,6 @@ public async Task<IActionResult> ReportIssue(
                 return StatusCode(500, new { error = ex.Message });
             }
         }
-
-
 
         [HttpPost("{id}/rate")]
         public async Task<IActionResult> RateIssue(
