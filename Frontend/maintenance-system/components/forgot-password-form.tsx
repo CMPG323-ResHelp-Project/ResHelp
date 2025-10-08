@@ -88,7 +88,7 @@ export function ForgotPasswordForm({ onViewChange }: ForgotPasswordFormProps) {
       <div className="flex flex-col items-center justify-center space-y-2">
         <h2 className="text-2xl font-bold">Forgot Password</h2>
         <p className="text-muted-foreground text-center">
-          Enter your registered email address to receive a password reset link.
+          Enter your registered email address to receive a new password.
         </p>
       </div>
 

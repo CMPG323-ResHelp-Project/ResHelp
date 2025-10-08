@@ -30,6 +30,10 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
   const [error, setError] = useState<string | null>(null) // 🔴 central error state
   const router = useRouter()
 
+  const [residenceName, setResidenceName] = useState("")
+  const [residenceSection, setResidenceSection] = useState("")
+  const [residenceRoom, setResidenceRoom] = useState("")
+
   // New state variables for field-level errors
   const [emailError, setEmailError] = useState("")
   const [passwordError, setPasswordError] = useState("")
@@ -79,16 +83,14 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
       hasError = true
     }
 
-    // Address Validation (for students)
-    if (userType === "student" && !address) {
-      setError("Please enter your residence address.")
-      hasError = true
-    }
-
     // Maintenance Type Validation (for staff)
-    if (userType === "staff" && !maintenanceType) {
-      setError("Please select your maintenance area.")
-      hasError = true
+    if (userType === "student") {
+      const requiredFields = [residenceName, residenceSection, residenceRoom]
+      const allFilled = requiredFields.every(field => field.trim() !== "")
+      if (!allFilled) {
+        setError("All three Residence Address fields (Name, Section, Room) must be filled.")
+        return
+      }
     }
 
     if (hasError) {
@@ -98,11 +100,19 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
     setIsLoading(true)
 
     try {
+      // Concatenate address if student
+      let addressToSend = ""
+      if (userType === "student") {
+        const roomValue = residenceRoom.trim()
+        const formattedRoom = roomValue.startsWith("Room ") ? roomValue : `Room ${roomValue}`
+        addressToSend = [residenceName.trim(), residenceSection.trim(), formattedRoom].join(", ")
+      }
+
       const response = await fetch("http://localhost:5229/Register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, surname, email, phone: cleanedPhone, password, userType, maintenanceType, address
+          name, surname, email, phone: cleanedPhone, password, userType, maintenanceType, address: addressToSend
         })
       })
 
@@ -255,17 +265,15 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
                 </div>
                 {userType === "student" && (
                   <div className="space-y-2">
-                    <Label htmlFor="address">Residence Address</Label>
-                    <Input
-                      id="address"
-                      type="text"
-                      placeholder="Enter your residence address"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      required
-                    />
-                    {addressError && <p className="text-red-500 text-sm mt-1">{addressError}</p>}
+                  <Label htmlFor="residenceName">Residence Address</Label>
+                  <div className="grid grid-cols-1 gap-2">
+                    <Input placeholder="Residence Name" value={residenceName} onChange={e => setResidenceName(e.target.value)} required />
+                    <Input placeholder="Section" value={residenceSection} onChange={e => setResidenceSection(e.target.value)} required />
+                    <Input placeholder="Room Number" value={residenceRoom} onChange={e => setResidenceRoom(e.target.value)} required />
                   </div>
+                  <Alert className="border-green-200 bg-green-50 text-green-800 mt-2">
+                    <AlertDescription>All three fields must be filled. </AlertDescription>
+                  </Alert>                </div>
                 )}
                 {userType === "staff" && (
                   <div className="space-y-2">
