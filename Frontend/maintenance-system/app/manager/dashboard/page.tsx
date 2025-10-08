@@ -22,6 +22,7 @@ import {
 import { TrendingUp, Clock, CheckCircle, AlertTriangle, Users, Calendar, BarChart3 } from "lucide-react"
 import { useRouter } from "next/navigation"
 import { useState, useEffect } from "react"
+
 type Issue = {
   Title: string;
   Description: string;
@@ -94,15 +95,17 @@ export default function ManagerDashboard() {
           </Button>
         </div>
 
+        {/* Overview Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4 mb-6">
             <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Calendar className="h-5 w-5 text-blue-600" /><div><p className="text-sm text-muted-foreground">Total Issues</p><p className="text-2xl font-bold">{overviewStats.totalIssues}</p></div></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><CheckCircle className="h-5 w-5 text-green-600" /><div><p className="text-sm text-muted-foreground">Resolved</p><p className="text-2xl font-bold">{overviewStats.resolvedIssues}</p></div></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Clock className="h-5 w-5 text-orange-600" /><div><p className="text-sm text-muted-foreground">Avg Response</p><p className="text-2xl font-bold">{overviewStats.avgResponseTime}</p></div></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><TrendingUp className="h-5 w-5 text-purple-600" /><div><p className="text-sm text-muted-foreground">Avg Resolution</p><p className="text-2xl font-bold">{overviewStats.avgResolutionTime}</p></div></div></CardContent></Card>
-            <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Users className="h-5 w-5 text-indigo-600" /><div><p className="text-sm text-muted-foreground">Satisfaction</p><p className="text-2xl font-bold">{overviewStats.studentSatisfaction > 0 ? `${overviewStats.studentSatisfaction}/5` : 'N/A'}</p></div></div></CardContent></Card>
+            <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><Users className="h-5 w-5 text-indigo-600" /><div><p className="text-sm text-muted-foreground">Satisfaction</p><p className="text-2xl font-bold">{overviewStats.studentSatisfaction > 0 ? `${overviewStats.studentSatisfaction.toFixed(1)}/5` : 'N/A'}</p></div></div></CardContent></Card>
             <Card><CardContent className="p-4"><div className="flex items-center space-x-2"><AlertTriangle className="h-5 w-5 text-cyan-600" /><div><p className="text-sm text-muted-foreground">Active Staff</p><p className="text-2xl font-bold">{overviewStats.activeStaff}</p></div></div></CardContent></Card>
         </div>
 
+        {/* Main Charts: Monthly Trends and Category Breakdown */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           <Card>
             <CardHeader><CardTitle>Monthly Issue Trends</CardTitle></CardHeader>
@@ -126,6 +129,7 @@ export default function ManagerDashboard() {
           </Card>
         </div>
 
+        {/*Response Times and Staff Performance */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Card>
             <CardHeader><CardTitle>Response Time Distribution</CardTitle></CardHeader>
@@ -138,12 +142,46 @@ export default function ManagerDashboard() {
             </CardContent>
           </Card>
           <Card>
-            <CardHeader><CardTitle>Staff Performance</CardTitle></CardHeader>
+            <CardHeader>
+              <CardTitle>Staff Performance</CardTitle>
+            </CardHeader>
             <CardContent>
-              {isLoading || staffPerformance.length === 0 ? (<div className="h-[300px] flex items-center justify-center text-muted-foreground"><div className="text-center"><Users className="h-12 w-12 mx-auto mb-4" /><p>{isLoading ? "Loading..." : "No staff performance data"}</p></div></div>) : (
-                <div className="space-y-4">
+              {isLoading || staffPerformance.length === 0 ? (
+                <div className="h-[300px] flex items-center justify-center text-muted-foreground">
+                  <div className="text-center">
+                    <Users className="h-12 w-12 mx-auto mb-4" />
+                    <p>{isLoading ? "Loading data..." : "No staff performance data available yet"}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4 max-h-[300px] overflow-y-auto pr-2">
                   {staffPerformance.map((staff, index) => (
-                    <div key={index} className="flex items-center justify-between p-3 border rounded-lg"><div><p className="font-medium">{staff.name}</p><p className="text-sm text-muted-foreground">{staff.resolved} resolved • Avg: {staff.avgTime}</p></div><div className="text-right"><div className="flex items-center space-x-1"><span className="text-sm font-medium">{staff.satisfaction}</span><span className="text-xs text-muted-foreground">/5</span></div><Badge className="bg-green-100 text-green-800 text-xs">{staff.satisfaction >= 4.3 ? "Excellent" : "Good"}</Badge></div></div>
+                    <div key={index} className="flex items-center justify-between p-3 border border-border rounded-lg hover:bg-muted/50">
+                      <div>
+                        <p className="font-medium">{staff.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          {staff.resolved} resolved • Avg: {staff.avgTime}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <div className="flex items-center justify-end space-x-1">
+                          <span className="text-sm font-medium">{staff.satisfaction}</span>
+                          <span className="text-xs text-muted-foreground">/ 5</span>
+                        </div>
+                        <Badge 
+                           variant="outline"
+                           className={
+                            staff.satisfaction >= 4.5 
+                            ? "border-green-500 text-green-600" 
+                            : staff.satisfaction >= 4.0 
+                            ? "border-yellow-500 text-yellow-600" 
+                            : "border-red-500 text-red-600"
+                          }
+                        >
+                          {staff.satisfaction >= 4.5 ? "Excellent" : staff.satisfaction >= 4.0 ? "Good" : "Average"}
+                        </Badge>
+                      </div>
+                    </div>
                   ))}
                 </div>
               )}

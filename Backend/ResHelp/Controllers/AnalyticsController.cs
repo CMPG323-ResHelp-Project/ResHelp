@@ -16,7 +16,7 @@ namespace ResHelp.Controllers
 
         public AnalyticsController(FirestoreDb firestoreDb)
         {
-            this._firestoreDb = firestoreDb; 
+            this._firestoreDb = firestoreDb;
         }
 
         [HttpGet("overview")]
@@ -60,7 +60,7 @@ namespace ResHelp.Controllers
                 avgResponseTime = responseTimesInHours.Any() ? $"{Math.Round(responseTimesInHours.Average(), 1)}h" : "N/A",
                 avgResolutionTime = resolutionTimesInHours.Any() ? $"{Math.Round(resolutionTimesInHours.Average(), 1)}h" : "N/A",
                 studentSatisfaction = ratings.Any() ? Math.Round(ratings.Average(), 1) : 0,
-                activeStaff = 5 
+                activeStaff = 5
             };
             return Ok(overview);
         }
@@ -99,26 +99,41 @@ namespace ResHelp.Controllers
         public async Task<IActionResult> GetStaffPerformance()
         {
             var snapshot = await _firestoreDb.Collection("issues")
-                .WhereEqualTo("Status", "Resolved")
                 .WhereNotEqualTo("ResolvedBy", null)
                 .GetSnapshotAsync();
+
             var staffPerformance = snapshot.Documents
+                .Where(doc => doc.ToDictionary().GetValueOrDefault("Status")?.ToString()?.ToLower() == "resolved")
                 .GroupBy(doc => doc.ToDictionary().GetValueOrDefault("ResolvedBy")?.ToString())
                 .Select(group => {
-                    var ratings = group.Select(doc => doc.ToDictionary().GetValueOrDefault("Rating")).Where(r => r != null && int.TryParse(r.ToString(), out _)).Select(r => int.Parse(r.ToString())).ToList();
+                    var ratings = group
+                        .Select(doc => doc.ToDictionary().GetValueOrDefault("Rating"))
+                        .Where(r => r != null && int.TryParse(r.ToString(), out _))
+                        .Select(r => int.Parse(r.ToString()))
+                        .ToList();
+
                     var resolutionTimes = group.Select(doc => {
                         var issue = doc.ToDictionary();
-                        if (issue.TryGetValue("ReportedAt", out var rAtObj) && rAtObj is Timestamp rAt && issue.TryGetValue("UpdatedAt", out var uAtObj) && uAtObj is Timestamp uAt)
+                        if (issue.TryGetValue("ReportedAt", out var rAtObj) && rAtObj is Timestamp rAt &&
+                            issue.TryGetValue("ResolvedAt", out var resolvedAtObj) && resolvedAtObj is Timestamp resolvedAt)
                         {
-                            return (uAt.ToDateTime() - rAt.ToDateTime()).TotalHours;
+                            return (resolvedAt.ToDateTime() - rAt.ToDateTime()).TotalHours;
                         }
-                        return -1.0;
-                    }).Where(h => h >= 0).ToList();
-                    return new { name = group.Key, resolved = group.Count(), satisfaction = ratings.Any() ? Math.Round(ratings.Average(), 1) : 0, avgTime = resolutionTimes.Any() ? $"{Math.Round(resolutionTimes.Average(), 1)}h" : "N/A" };
+                        return -1.0; 
+                    }).Where(h => h >= 0).ToList(); 
+
+                    return new
+                    {
+                        name = group.Key,
+                        resolved = group.Count(),
+                        satisfaction = ratings.Any() ? Math.Round(ratings.Average(), 1) : 0,
+                        avgTime = resolutionTimes.Any() ? $"{Math.Round(resolutionTimes.Average(), 1)}h" : "N/A"
+                    };
                 })
-                .Where(s => !string.IsNullOrEmpty(s.name))
+                .Where(s => !string.IsNullOrEmpty(s.name)) 
                 .OrderByDescending(s => s.resolved)
                 .ToList();
+
             return Ok(staffPerformance);
         }
 

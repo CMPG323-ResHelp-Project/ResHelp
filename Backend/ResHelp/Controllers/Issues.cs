@@ -21,13 +21,11 @@ namespace ResHelp.Controllers
             _firestoreDb = firestoreDb;
         }
 
-
-
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateIssueStatus(
-                string id,
-                [FromBody] StatusUpdateDto statusUpdate,
-                [FromHeader(Name = "Authorization")] string authorization)
+         string id,
+         [FromBody] StatusUpdateDto statusUpdate,
+         [FromHeader(Name = "Authorization")] string authorization)
         {
             if (string.IsNullOrEmpty(authorization))
                 return Unauthorized(new { error = "Authorization header is missing." });
@@ -46,10 +44,10 @@ namespace ResHelp.Controllers
 
                 var existingIssue = snapshot.ToDictionary();
                 var updates = new Dictionary<string, object>
-                {
-                    { "Status", statusUpdate.NewStatus },
-                    { "UpdatedAt", DateTime.UtcNow }
-                };
+        {
+            { "Status", statusUpdate.NewStatus },
+            { "UpdatedAt", DateTime.UtcNow }
+        };
 
                 string existingStatus = existingIssue.ContainsKey("Status") ? existingIssue["Status"]?.ToString() : "";
 
@@ -61,6 +59,7 @@ namespace ResHelp.Controllers
                 if (statusUpdate.NewStatus.ToLower() == "resolved")
                 {
                     updates.Add("ResolvedBy", userEmail);
+                    updates.Add("ResolvedAt", DateTime.UtcNow); 
                 }
 
                 await docRef.UpdateAsync(updates);
