@@ -34,53 +34,90 @@ type Issue = {
   Rating?: number;
 };
 
-const buildingPerformance: any[] = []
-const recurringIssues: any[] = []
-const resolutionTimeByCategory: any[] = []
-
-//const [detailedTrends, setDetailedTrends] = useState<any[]>([])
-//const [buildingPerformance, setBuildingPerformance] = useState<any[]>([])
-///const [recurringIssues, setRecurringIssues] = useState<any[]>([])
-//const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([])
-
 export default function AnalyticsPage() {
 
-const [issue, setIssue] = useState<Issue[]>([]);
-const [errorMessage, setErrorMessage] = useState<string | null>(null);
-const [confirmationMessage, setConfirmationMessage] = useState<string | null>(
-  null
-);
-const [isTableLoading, setIsTableLoading] = useState(false);
+  const [issue, setIssue] = useState<Issue[]>([]);
+  const [filteredIssues, setFilteredIssues] = useState<Issue[]>([]);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isTableLoading, setIsTableLoading] = useState(false);
 
-const [detailedTrends, setDetailedTrends] = useState<any[]>([]);
-const [buildingPerformance, setBuildingPerformance] = useState<any[]>([]);
-const [recurringIssues, setRecurringIssues] = useState<any[]>([]);
-const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([]);
+  const [detailedTrends, setDetailedTrends] = useState<any[]>([]);
+  const [buildingPerformance, setBuildingPerformance] = useState<any[]>([]);
+  const [recurringIssues, setRecurringIssues] = useState<any[]>([]);
+  const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>([]);
+
+  const [timeRange, setTimeRange] = useState("7d")
+  const [buildingFilter, setBuildingFilter] = useState("all")
+  const router = useRouter()
 
   useEffect(() => {
-      const fetchIssues = async () => {
-        setErrorMessage(null);
-        setIsTableLoading(true);
-    
-        try {
-          const response = await fetch("http://localhost:5229/issue/analytics", { method: "GET" });
-          if (!response.ok) throw new Error("Failed to fetch issues");
-    
-          const issuesList: Issue[] = await response.json();
-          console.log("Fetched issues:", issuesList);
-          setIssue(issuesList); 
-        } catch (err: any) {
-          setErrorMessage(err.message);
-        } finally {
-          setIsTableLoading(false);
-        }
-      };
-    
-      fetchIssues();
+    const fetchIssues = async () => {
+      setErrorMessage(null);
+      setIsTableLoading(true);
+  
+      try {
+        const response = await fetch("http://localhost:5229/issue/analytics", { method: "GET" });
+        if (!response.ok) throw new Error("Failed to fetch issues");
+  
+        const issuesList: Issue[] = await response.json();
+        console.log("Fetched issues:", issuesList);
+        setIssue(issuesList); 
+      } catch (err: any) {
+        setErrorMessage(err.message);
+      } finally {
+        setIsTableLoading(false);
+      }
+    };
+  
+    fetchIssues();
   }, []);
 
+  // Effect to filter issues based on timeRange and buildingFilter
   useEffect(() => {
-    if (issue.length > 0) {
+    let processedIssues = [...issue];
+
+    // Filter by Time Range
+    const now = new Date();
+    let startDate = new Date();
+    let applyTimeFilter = true;
+
+    switch (timeRange) {
+      case "7d":
+        startDate.setDate(now.getDate() - 7);
+        break;
+      case "30d":
+        startDate.setDate(now.getDate() - 30);
+        break;
+      case "90d":
+        startDate.setMonth(now.getMonth() - 3);
+        break;
+      case "1y":
+        startDate.setFullYear(now.getFullYear() - 1);
+        break;
+      default:
+        applyTimeFilter = false;
+        break;
+    }
+    
+    if(applyTimeFilter) {
+        processedIssues = processedIssues.filter(i => new Date(i.ReportedAt) >= startDate);
+    }
+
+    // Filter by Building
+    if (buildingFilter !== "all") {
+      processedIssues = processedIssues.filter(i => {
+        const buildingMatch = i.Location.match(/Building\s([A-E])/i);
+        const building = buildingMatch ? buildingMatch[1].toLowerCase() : null;
+        return building === buildingFilter;
+      });
+    }
+    
+    setFilteredIssues(processedIssues);
+  }, [issue, timeRange, buildingFilter]);
+
+  // All subsequent useEffect hooks now depend on `filteredIssues`
+  useEffect(() => {
+    if (filteredIssues.length > 0) {
       const inactiveStatuses = ["Resolved", "Cancelled"];
 
       const trends = new Map<
@@ -88,7 +125,7 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
         { date: string; reported: number; resolved: number; urgent: number }
       >();
 
-      issue.forEach((i) => {
+      filteredIssues.forEach((i) => {
         const reportedDateKey = new Date(i.ReportedAt).toISOString().split('T')[0];
 
         if (!trends.has(reportedDateKey)) {
@@ -101,16 +138,14 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
         }
 
         const dayData = trends.get(reportedDateKey)!;
-
         dayData.reported += 1;
 
         const isInactive = inactiveStatuses.some(
           (inactiveStatus) => inactiveStatus.toUpperCase() === i.Status?.toUpperCase()
         );
-
         const isActive = !isInactive;
 
-       if (i.Priority.toUpperCase() === "HIGH" && isActive) {
+        if (i.Priority.toUpperCase() === "HIGH" && isActive) {
           dayData.urgent += 1;
         }
 
@@ -134,40 +169,39 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
       );
 
       setDetailedTrends(trendsArray);
+    } else {
+      setDetailedTrends([]);
     }
-  }, [issue]);
+  }, [filteredIssues]);
 
   useEffect(() => {
-  if (issue.length > 0) {
+    if (filteredIssues.length > 0) {
+      const issuesByBuilding = filteredIssues.reduce((buildingCounts, currentIssue) => {
+        const buildingMatch = currentIssue.Location.match(/Building\s([A-E])/i);
+        const building = buildingMatch ? `Building ${buildingMatch[1].toUpperCase()}` : "Building Unknown";
 
-    const issuesByBuilding = issue.reduce((buildingCounts, currentIssue) => {
+        if (!buildingCounts[building]) {
+          buildingCounts[building] = 0;
+        }
+        buildingCounts[building]++;
+        
+        return buildingCounts;
+      }, {} as Record<string, number>);
 
-      const buildingMatch = currentIssue.Location.match(/Building\s([A-E])/i);
-      const building = buildingMatch ? buildingMatch[1]?.toUpperCase() : "Unknown";
+      const formattedData = Object.keys(issuesByBuilding).map(buildingName => ({
+        building: buildingName,
+        issues: issuesByBuilding[buildingName],
+      }));
 
-      if (!buildingCounts[building]) {
-        buildingCounts[building] = 0;
-      }
-
-      buildingCounts[building]++;
-      
-      return buildingCounts;
-    }, {} as Record<string, number>);
-
-    const formattedData = Object.keys(issuesByBuilding).map(buildingName => ({
-      building: `Building ${buildingName}`,
-      issues: issuesByBuilding[buildingName],
-    }));
-
-    setBuildingPerformance(formattedData);
-  }
-}, [issue]); 
+      setBuildingPerformance(formattedData);
+    } else {
+        setBuildingPerformance([]);
+    }
+  }, [filteredIssues]); 
 
   useEffect(() => {
-    if (issue.length > 0) {
-      const inactiveStatuses = ["Resolved", "Cancelled"];
-
-      const resolvedIssues = issue.filter(i => 
+    if (filteredIssues.length > 0) {
+      const resolvedIssues = filteredIssues.filter(i => 
         i.ReportedAt && 
         i.UpdatedAt &&
         i.Status?.toUpperCase() === "RESOLVED" 
@@ -185,7 +219,6 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
         const diffInMilliseconds = updatedDate.getTime() - reportedDate.getTime();
         
         const diffInHours = diffInMilliseconds / (1000 * 60 * 60);
-
         groupedTimesByCategory[category].push(diffInHours);
 
         return groupedTimesByCategory;
@@ -204,13 +237,14 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
       });
 
       setResolutionTimeByCategory(formattedData);
+    } else {
+      setResolutionTimeByCategory([]);
     }
-  }, [issue]); 
+  }, [filteredIssues]); 
 
-    useEffect(() => {
-    if (issue.length > 0) {
-      
-      const issuesByTitle = issue.reduce((groupedIssues, currentIssue) => {
+  useEffect(() => {
+    if (filteredIssues.length > 0) {
+      const issuesByTitle = filteredIssues.reduce((groupedIssues, currentIssue) => {
         const title = currentIssue.Title.trim();
 
         if (!groupedIssues[title]) {
@@ -227,7 +261,6 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
         const building = buildingMatch ? buildingMatch[1]?.toUpperCase() || buildingMatch[2]?.toUpperCase() : "Unknown";
         
         groupedIssues[title].buildings.add(building);
-
         return groupedIssues;
       }, {} as Record<string, { issue: string; occurrences: number; buildings: Set<string> }>);
 
@@ -239,14 +272,11 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
         }));
 
       const sortedData = formattedData.sort((a, b) => b.occurrences - a.occurrences);
-
       setRecurringIssues(sortedData);
+    } else {
+        setRecurringIssues([]);
     }
-  }, [issue]);
-
-  const [timeRange, setTimeRange] = useState("7d")
-  const [buildingFilter, setBuildingFilter] = useState("all")
-  const router = useRouter()
+  }, [filteredIssues]);
 
   const getTrendIcon = (trend: string) => {
     switch (trend) {
@@ -334,7 +364,7 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
               <div className="h-[400px] flex items-center justify-center text-muted-foreground">
                 <div className="text-center">
                   <Calendar className="h-12 w-12 mx-auto mb-4" />
-                  <p>No daily trend data available yet</p>
+                  <p>No daily trend data available for the selected filters</p>
                 </div>
               </div>
             ) : (
@@ -389,7 +419,7 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
                 <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                   <div className="text-center">
                     <BarChart3 className="h-12 w-12 mx-auto mb-4" />
-                    <p>No building performance data available yet</p>
+                    <p>No building performance data available for the selected filters</p>
                   </div>
                 </div>
               ) : (
@@ -416,7 +446,7 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
                 <div className="h-[300px] flex items-center justify-center text-muted-foreground">
                   <div className="text-center">
                     <AlertTriangle className="h-12 w-12 mx-auto mb-4" />
-                    <p>No resolution time data available yet</p>
+                    <p>No resolution time data available for the selected filters</p>
                   </div>
                 </div>
               ) : (
@@ -449,7 +479,7 @@ const [resolutionTimeByCategory, setResolutionTimeByCategory] = useState<any[]>(
               <div className="p-8 text-center text-muted-foreground">
                 <AlertTriangle className="h-12 w-12 mx-auto mb-4" />
                 <h3 className="text-lg font-semibold mb-2">No recurring issues identified</h3>
-                <p>No patterns of recurring maintenance issues have been detected yet.</p>
+                <p>No patterns of recurring maintenance issues have been detected for the selected filters.</p>
               </div>
             ) : (
               <div className="space-y-4">
