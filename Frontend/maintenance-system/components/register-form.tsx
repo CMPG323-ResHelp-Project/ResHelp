@@ -83,7 +83,7 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
       hasError = true
     }
 
-    // Maintenance Type Validation (for staff)
+    // Address validation
     if (userType === "student") {
       const requiredFields = [residenceName, residenceSection, residenceRoom]
       const allFilled = requiredFields.every(field => field.trim() !== "")
