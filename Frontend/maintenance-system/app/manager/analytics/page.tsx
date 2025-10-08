@@ -115,7 +115,6 @@ export default function AnalyticsPage() {
     setFilteredIssues(processedIssues);
   }, [issue, timeRange, buildingFilter]);
 
-  // All subsequent useEffect hooks now depend on `filteredIssues`
   useEffect(() => {
     if (filteredIssues.length > 0) {
       const inactiveStatuses = ["Resolved", "Cancelled"];
