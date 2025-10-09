@@ -280,78 +280,82 @@ public async Task<IActionResult> GetStaffIssueById(string id, [FromHeader(Name =
 }
 
 
-  [HttpPatch("{id}/status")]
-public async Task<IActionResult> UpdateIssueStatus(
-    string id,
-    [FromHeader(Name = "Authorization")] string authorization,
-    [FromBody] Dictionary<string, string> body)
-{
-    if (string.IsNullOrEmpty(authorization))
-        return Unauthorized(new { error = "Authorization header is missing." });
+        [HttpPatch("{id}/status")]
+        public async Task<IActionResult> UpdateIssueStatus(
+          string id,
+          [FromHeader(Name = "Authorization")] string authorization,
+          [FromBody] Dictionary<string, string> body)
+        {
+            if (string.IsNullOrEmpty(authorization))
+                return Unauthorized(new { error = "Authorization header is missing." });
 
-    if (!body.ContainsKey("status"))
-        return BadRequest(new { error = "Status is required in request body." });
+            if (!body.ContainsKey("status"))
+                return BadRequest(new { error = "Status is required in request body." });
 
-    try
-    {
-        // Verify Firebase token
-        var idToken = authorization.Replace("Bearer ", "").Trim();
-        var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+            try
+            {
+                var idToken = authorization.Replace("Bearer ", "").Trim();
+                var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
 
-        string email = decodedToken.Claims["email"]?.ToString() ?? "";
-        if (string.IsNullOrEmpty(email))
-            return Unauthorized(new { error = "User email not found in token." });
+                string email = decodedToken.Claims["email"]?.ToString() ?? "";
+                if (string.IsNullOrEmpty(email))
+                    return Unauthorized(new { error = "User email not found in token." });
 
-        // Fetch staff info
-        var staffQuery = _firestoreDb.Collection("users").WhereEqualTo("Email", email);
-        var staffSnapshot = await staffQuery.GetSnapshotAsync();
-        if (staffSnapshot.Count == 0)
-            return NotFound(new { error = "Staff user not found." });
+                var staffQuery = _firestoreDb.Collection("users").WhereEqualTo("Email", email);
+                var staffSnapshot = await staffQuery.GetSnapshotAsync();
+                if (staffSnapshot.Count == 0)
+                    return NotFound(new { error = "Staff user not found." });
 
-        var staffDoc = staffSnapshot.Documents[0];
-        string name = staffDoc.GetValue<string>("Name") ?? "";
-        string surname = staffDoc.GetValue<string>("Surname") ?? "";
-        string staffEmail = staffDoc.GetValue<string>("Email") ?? "";
-        string address = staffDoc.GetValue<string>("Address") ?? "";
-        string phone = staffDoc.GetValue<string>("Phone") ?? "";
-        string maintenanceType = staffDoc.GetValue<string>("MaintenanceType") ?? "";
+                var staffDoc = staffSnapshot.Documents[0];
+                string name = staffDoc.GetValue<string>("Name") ?? "";
+                string surname = staffDoc.GetValue<string>("Surname") ?? "";
+                string staffEmail = staffDoc.GetValue<string>("Email") ?? "";
+                string address = staffDoc.GetValue<string>("Address") ?? "";
+                string phone = staffDoc.GetValue<string>("Phone") ?? "";
+                string maintenanceType = staffDoc.GetValue<string>("MaintenanceType") ?? "";
 
-        // Fetch the issue document
-        var issueDoc = _firestoreDb.Collection("issues").Document(id);
-        var snapshot = await issueDoc.GetSnapshotAsync();
-        if (!snapshot.Exists)
-            return NotFound(new { error = "Issue not found." });
+                var issueDoc = _firestoreDb.Collection("issues").Document(id);
+                var snapshot = await issueDoc.GetSnapshotAsync();
+                if (!snapshot.Exists)
+                    return NotFound(new { error = "Issue not found." });
 
-        // Prepare updates
-        var updates = new Dictionary<string, object>
+                var updates = new Dictionary<string, object>
         {
             { "Status", body["status"] },
-            { "UpdatedAt", Timestamp.GetCurrentTimestamp() } // <-- Add updated timestamp
+            { "UpdatedAt", Timestamp.GetCurrentTimestamp() }
         };
 
-        // Add driver info if status is assigned/in-progress
-        if (body["status"] == "assigned" || body["status"] == "in-progress")
-        {
-            updates["DriverEmail"] = staffEmail;
-            updates["DriverName"] = name;
-            updates["DriverSurname"] = surname;
-            updates["DriverPhone"] = phone;
-            updates["DriverAddress"] = address;
+                if (body["status"] == "assigned")
+                {
+                    updates["DriverEmail"] = staffEmail;
+                    updates["DriverName"] = name;
+                    updates["DriverSurname"] = surname;
+                    updates["DriverPhone"] = phone;
+                    updates["DriverAddress"] = address;
+                    updates["AssignedAt"] = Timestamp.GetCurrentTimestamp(); 
+                }
+                else if (body["status"] == "in progress")
+                {
+                    updates["DriverEmail"] = staffEmail;
+                    updates["DriverName"] = name;
+                    updates["DriverSurname"] = surname;
+                    updates["DriverPhone"] = phone;
+                    updates["DriverAddress"] = address;
+                }
+
+                await issueDoc.UpdateAsync(updates);
+
+                return Ok(new { message = "Status updated successfully", status = body["status"] });
+            }
+            catch (FirebaseAuthException ex)
+            {
+                return Unauthorized(new { error = "Invalid token: " + ex.Message });
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = ex.Message });
+            }
         }
-
-        await issueDoc.UpdateAsync(updates);
-
-        return Ok(new { message = "Status updated successfully", status = body["status"] });
-    }
-    catch (FirebaseAuthException ex)
-    {
-        return Unauthorized(new { error = "Invalid token: " + ex.Message });
-    }
-    catch (Exception ex)
-    {
-        return StatusCode(500, new { error = ex.Message });
-    }
-}
 
 [HttpGet("history")]
 public async Task<IActionResult> GetStaffIssueHistory([FromHeader(Name = "Authorization")] string authorization)
