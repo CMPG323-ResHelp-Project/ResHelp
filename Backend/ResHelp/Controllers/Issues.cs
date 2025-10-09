@@ -161,8 +161,47 @@ public async Task<IActionResult> ReportIssue(
     }
 }
 
+        [HttpGet("get")]
+        public async Task<IActionResult> GetAllIssues()
+        {
+            try
+            {
+                var issuesSnapshot = await _firestoreDb.Collection("issues").GetSnapshotAsync();
+                var issuesList = new List<RequestDto>();
 
-      [HttpGet("all")]
+                foreach (var doc in issuesSnapshot.Documents)
+                {
+                    var data = doc.ToDictionary();
+                    issuesList.Add(new RequestDto
+                    {
+                        Id = data.ContainsKey("Id") ? data["Id"].ToString() : doc.Id,
+                        Title = data.ContainsKey("Title") ? data["Title"].ToString() : string.Empty,
+                        Description = data.ContainsKey("Description") ? data["Description"].ToString() : string.Empty,
+                        Category = data.ContainsKey("Category") ? data["Category"].ToString() : string.Empty,
+                        Priority = data.ContainsKey("Priority") ? data["Priority"].ToString() : string.Empty,
+                        Location = data.ContainsKey("Location") ? data["Location"].ToString() : string.Empty,
+                        IsUrgent = data.ContainsKey("IsUrgent") && Convert.ToBoolean(data["IsUrgent"]),
+                        Status = data.ContainsKey("Status") ? data["Status"].ToString() : "Pending",
+
+                        ReportedAt = data.ContainsKey("ReportedAt") && data["ReportedAt"] is Google.Cloud.Firestore.Timestamp ts
+                            ? ts.ToDateTime().ToString("o")
+                            : string.Empty, 
+
+                        ReporterEmail = data.ContainsKey("ReporterEmail") ? data["ReporterEmail"].ToString() : string.Empty,
+                        ReporterName = data.ContainsKey("ReporterName") ? data["ReporterName"].ToString() : string.Empty,
+                    });
+                }
+
+                return Ok(issuesList);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal server error: " + ex.Message });
+            }
+        }
+
+
+        [HttpGet("all")]
         public async Task<IActionResult> GetAllIssues([FromHeader(Name = "Authorization")] string authorization)
         {
             if (string.IsNullOrEmpty(authorization))
