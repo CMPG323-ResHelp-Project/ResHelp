@@ -326,67 +326,64 @@ public async Task<IActionResult> ReportIssue(
             }
         }
 
-        [HttpPost("{id}/rate")]
-        public async Task<IActionResult> RateIssue(
-            string id,
-            [FromBody] RatingDto ratingDto, // { int Rating }
-            [FromHeader(Name = "Authorization")] string authorization)
+       [HttpPost("{id}/rate")]
+public async Task<IActionResult> RateIssue(
+    string id,
+    [FromBody] RatingDto ratingDto, // { int Rating }
+    [FromHeader(Name = "Authorization")] string authorization)
+{
+    if (ratingDto == null || ratingDto.Rating < 1 || ratingDto.Rating > 5)
+        return BadRequest(new { error = "Rating must be between 1 and 5." });
+
+    if (string.IsNullOrEmpty(authorization))
+        return Unauthorized(new { error = "Authorization header is missing." });
+
+    try
+    {
+        var idToken = authorization.Replace("Bearer ", "").Trim();
+        var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+        string email = decodedToken.Claims["email"]?.ToString() ?? "";
+
+        var docRef = _firestoreDb.Collection("issues").Document(id);
+        var snapshot = await docRef.GetSnapshotAsync();
+
+        if (!snapshot.Exists)
+            return NotFound(new { error = $"Issue with ID {id} not found." });
+
+        var existingIssue = snapshot.ToDictionary();
+        string reporterEmail = existingIssue.ContainsKey("ReporterEmail") ? existingIssue["ReporterEmail"]?.ToString() : null;
+        string status = existingIssue.ContainsKey("Status") ? existingIssue["Status"]?.ToString() : null;
+
+        // Check ownership by email
+        if (reporterEmail != email)
+            return Forbid();
+
+        // Only allow rating if status is Resolved (case-insensitive)
+        if ((status ?? "").ToLower() != "resolved")
+            return BadRequest(new { error = "Only resolved issues can be rated." });
+
+        // Update the rating
+        var updates = new Dictionary<string, object>
         {
-            if (ratingDto == null || ratingDto.Rating < 1 || ratingDto.Rating > 5)
-                return BadRequest(new { error = "Rating must be between 1 and 5." });
+            { "Rating", ratingDto.Rating },
+            { "UpdatedAt", DateTime.UtcNow }
+        };
 
-            if (string.IsNullOrEmpty(authorization))
-                return Unauthorized(new { error = "Authorization header is missing." });
+        await docRef.UpdateAsync(updates);
 
-            try
-            {
-                var idToken = authorization.Replace("Bearer ", "").Trim();
-                var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
-                string uid = decodedToken.Uid;
-                string email = decodedToken.Claims["email"]?.ToString() ?? "";
+        return Ok(new { message = "Issue rated successfully.", id = id, rating = ratingDto.Rating });
+    }
+    catch (FirebaseAuthException ex)
+    {
+        return Unauthorized(new { error = "Invalid token: " + ex.Message });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { error = ex.Message });
+    }
+}
 
-                var docRef = _firestoreDb.Collection("issues").Document(id);
-                var snapshot = await docRef.GetSnapshotAsync();
-
-                if (!snapshot.Exists)
-                    return NotFound(new { error = $"Issue with ID {id} not found." });
-
-                var existingIssue = snapshot.ToDictionary();
-                string reportedByUid = existingIssue.ContainsKey("ReportedBy") ? existingIssue["ReportedBy"]?.ToString() : null;
-                string status = existingIssue.ContainsKey("Status") ? existingIssue["Status"]?.ToString() : null;
-
-                // Check ownership
-                if (reportedByUid != uid)
-                    return Forbid();
-
-                // Only allow rating if status is Resolved
-              // Only allow rating if status is Resolved (case-insensitive)
-if ((status ?? "").ToLower() != "resolved")
-    return BadRequest(new { error = "Only resolved issues can be rated." });
-
-
-                // Update the rating
-                var updates = new Dictionary<string, object>
-                {
-                    { "Rating", ratingDto.Rating },
-                    { "UpdatedAt", DateTime.UtcNow }
-                };
-
-                await docRef.UpdateAsync(updates);
-
-                return Ok(new { message = "Issue rated successfully.", id = id, rating = ratingDto.Rating });
-            }
-            catch (FirebaseAuthException ex)
-            {
-                return Unauthorized(new { error = "Invalid token: " + ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
-        [HttpPut("{id}/cancel")]
+[HttpPut("{id}/cancel")]
 public async Task<IActionResult> CancelIssue(
     string id,
     [FromHeader(Name = "Authorization")] string authorization)
@@ -398,7 +395,6 @@ public async Task<IActionResult> CancelIssue(
     {
         var idToken = authorization.Replace("Bearer ", "").Trim();
         var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
-        string uid = decodedToken.Uid;
         string email = decodedToken.Claims["email"]?.ToString() ?? "";
 
         var docRef = _firestoreDb.Collection("issues").Document(id);
@@ -408,10 +404,10 @@ public async Task<IActionResult> CancelIssue(
             return NotFound(new { error = $"Issue with ID {id} not found." });
 
         var existingIssue = snapshot.ToDictionary();
-        string reportedByUid = existingIssue.ContainsKey("ReportedBy") ? existingIssue["ReportedBy"]?.ToString() : null;
+        string reporterEmail = existingIssue.ContainsKey("ReporterEmail") ? existingIssue["ReporterEmail"]?.ToString() : null;
 
-        // Check ownership
-        if (reportedByUid != uid)
+        // Check ownership by email
+        if (reporterEmail != email)
             return Forbid();
 
         // ✅ Update the status to Cancelled
@@ -432,7 +428,6 @@ public async Task<IActionResult> CancelIssue(
         return StatusCode(500, new { error = ex.Message });
     }
 }
-
 
     }
 }

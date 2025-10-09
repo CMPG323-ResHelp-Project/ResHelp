@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Input } from "@/components/ui/input"
 import { useState, useEffect } from "react"
 import { useRouter, useParams } from "next/navigation"
-import { ArrowLeft, AlertTriangle, Clock, User, MapPin, Calendar, MessageSquare, CornerDownRight, Check, Wrench } from "lucide-react"
+import { ArrowLeft, AlertTriangle, Clock, User, MapPin, Calendar, MessageSquare, CornerDownRight, Check, Wrench, Star } from "lucide-react"
 import { auth } from "@/lib/firebase"
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 
@@ -25,6 +25,7 @@ type Issue = {
   updatedAt: string
   isUrgent: boolean
   imageUrl?: string
+  location: string
   updates: { // Keep the updates type, but remove the rendering
     id: string
     message: string
@@ -37,6 +38,7 @@ type Issue = {
   studentAddress: string
   studentPhone: string
   studentEmail: string
+  rating?: number | null // *** Student rating for the issue ***
 }
 
 type IssueAction = "accept" | "attend" | "resolve";
@@ -45,6 +47,37 @@ interface IssueConfirm {
   issue: Issue;
   action: IssueAction;
 }
+
+/**
+ * Renders a star rating display (e.g., ★★★☆☆) based on the score out of 5.
+ * @param score The rating value (0 to 5).
+ * @returns JSX.Element for the star rating.
+ */
+const StarRatingDisplay = ({ score }: { score: number }) => {
+  // Clamp score between 0 and 5
+  const clampedScore = Math.max(0, Math.min(5, score));
+  // Determine the number of full stars
+  const fullStars = Math.floor(clampedScore);
+  const emptyStars = 5 - fullStars;
+
+  const starElements = [];
+
+  // Full Stars (filled)
+  for (let i = 0; i < fullStars; i++) {
+    starElements.push(<Star key={`full-${i}`} className="h-6 w-6 fill-yellow-500 text-yellow-500" />);
+  }
+
+  // Empty Stars (outline)
+  for (let i = 0; i < emptyStars; i++) {
+    starElements.push(<Star key={`empty-${i}`} className="h-6 w-6 fill-transparent text-yellow-500" />);
+  }
+
+  return (
+    <span className="flex items-center space-x-0.5">
+      {starElements}
+    </span>
+  );
+};
 
 // Helper to get status icon
 const getStatusIcon = (status: string) => {
@@ -101,6 +134,7 @@ export default function IssueDetails() {
           updatedAt: data.UpdatedAt,
           isUrgent: data.IsUrgent,
           imageUrl: data.ImageUrl,
+          location: data.Location,
           updates: data.Updates?.map((u: any) => ({
             id: u.Id,
             message: u.Message,
@@ -113,12 +147,16 @@ export default function IssueDetails() {
           studentAddress: data.StudentAddress,
           studentPhone: data.StudentPhone,
           studentEmail: data.StudentEmail,
+          // *** FIX APPLIED: Use API data for rating, if available ***
+          rating: data.Rating != null ? parseFloat(data.Rating) : null,
+          // *** END FIX ***
         }
 
         setIssue(normalizedIssue)
       } catch (err: any) {
         console.error("Error fetching issue:", err)
         alert(err.message || "Failed to fetch issue")
+        // Fallback mock data for testing UI if fetch fails
       }
     }
 
@@ -144,8 +182,12 @@ export default function IssueDetails() {
         const errData = await res.json()
         throw new Error(errData.error || "Failed to update status")
       }
-      // Update local state
-      if (issue) setIssue({ ...issue, status: newStatus })
+      // Update local state and clear rating if not resolved
+      if (issue) setIssue({
+        ...issue,
+        status: newStatus,
+        rating: newStatus !== 'resolved' ? null : issue.rating // Keep existing rating if resolving, clear otherwise
+      })
     } catch (err: any) {
       console.error(err)
       alert(err.message || "Failed to update status")
@@ -221,9 +263,10 @@ export default function IssueDetails() {
                   <div>
                     <CardTitle className="flex items-center space-x-3 text-2xl font-bold">
                       {getStatusIcon(issue.status)}
-                      <span>{issue.title}</span>
-                    </CardTitle>
-                    <div className="flex items-center space-x-2 mt-3">
+                      <h4 className="text-lg font-semibold mb-2 text-gray-700">Title</h4>
+                      </CardTitle>
+                      <p className="text-gray-600 mb-6 border-l-4 border-primary/50 pl-3 italic">{issue.title}</p>
+                    <div className="flex flex-wrap items-center space-x-2 mt-3">
                       <Badge className={getStatusColor(issue.status)}>{issue.status.replace("-", " ")}</Badge>
                       <Badge className={getPriorityColor(issue.priority)}>{issue.priority} priority</Badge>
                       {issue.isUrgent && (
@@ -232,6 +275,7 @@ export default function IssueDetails() {
                           <span>URGENT</span>
                         </Badge>
                       )}
+                      {/* *** RATING DISPLAY REMOVED FROM HEADER *** */}
                     </div>
                   </div>
                 </div>
@@ -240,16 +284,45 @@ export default function IssueDetails() {
                 <h4 className="text-lg font-semibold mb-2 text-gray-700">Description</h4>
                 <p className="text-gray-600 mb-6 border-l-4 border-primary/50 pl-3 italic">{issue.description}</p>
 
-                {/* Issue Image (Placeholder logic restored) */}
+                {/* Issue Image */}
                 <div className="mb-6">
                   <h4 className="text-lg font-semibold mb-2 text-gray-700">Attachment</h4>
                   <img
-                    // Restored original logic to use placeholder if imageUrl is missing
                     src={issue.imageUrl || "/placeholder.svg"}
                     alt="Issue photo"
                     className="w-full max-w-sm rounded-lg shadow-md transition-shadow hover:shadow-xl cursor-pointer"
                   />
                 </div>
+
+                {/* *** RATING SECTION (MODIFIED FOR APPEALING DISPLAY) *** */}
+                {issue.status === 'resolved' && (
+                  <div className="mb-6 p-6 bg-white border border-yellow-300 rounded-xl shadow-lg">
+                    <h4 className="text-xl font-bold mb-3 text-yellow-800 flex items-center space-x-2 border-b pb-2 border-yellow-200">
+                      <Star className="h-6 w-6 fill-yellow-600 text-yellow-600" />
+                      <span>Student Feedback Rating</span>
+                    </h4>
+                    {/* MODIFIED: Check for null AND greater than 0 */}
+                    {issue.rating != null && issue.rating > 0 ? (
+                      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
+                        <div className="flex items-center space-x-4">
+                          <span className="text-5xl font-extrabold text-yellow-700">
+                            {parseFloat(issue.rating as any).toFixed(1)}
+                          </span>
+                          <span className="text-2xl font-bold text-gray-400">/ 5</span>
+                        </div>
+                        <div className="flex-shrink-0">
+                          <StarRatingDisplay score={parseFloat(issue.rating as any)} />
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center space-x-2 bg-gray-50 p-3 rounded-lg border border-gray-200">
+                        <MessageSquare className="h-5 w-5 text-gray-500" />
+                        <p className="text-sm text-gray-600 italic">This resolved issue is **Not yet Rated** by the student.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+                {/* *** END RATING SECTION *** */}
 
                 <h4 className="text-lg font-semibold mb-3 text-gray-700">Metadata</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-sm">
@@ -261,7 +334,7 @@ export default function IssueDetails() {
                   <div className="flex items-center space-x-3">
                     <MapPin className="h-4 w-4 text-primary" />
                     <span className="font-medium text-gray-800">Location:</span>
-                    <span className="text-gray-600">{issue.studentAddress}</span>
+                    <span className="text-gray-600">{issue.location}</span>
                   </div>
                   <div className="flex items-center space-x-3">
                     <Calendar className="h-4 w-4 text-primary" />
@@ -351,10 +424,11 @@ export default function IssueDetails() {
                     </Button>
                   </div>
                 )}
+                {/* *** RATING DISPLAY REMOVED FROM ACTION BUTTONS SECTION *** */}
                 {(issue.status === "resolved" || issue.status === "rejected") && (
                   <div className="p-4 bg-gray-100 rounded-md text-center text-gray-600">
                     <Check className="h-5 w-5 mx-auto mb-1 text-green-500" />
-                    <p className="text-sm font-medium">issue is already **{issue.status.toUpperCase()}**.</p>
+                    <p className="text-sm font-medium">Issue is already **{issue.status.toUpperCase()}**.</p>
                   </div>
                 )}
               </CardContent>

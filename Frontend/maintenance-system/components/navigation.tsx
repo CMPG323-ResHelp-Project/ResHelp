@@ -586,6 +586,11 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
             {/* Default/Initial Help Menu */}
             {helpTopic === "default" && (
               <>
+                {/* Fixed Footer Content (Shown only when viewing a specific topic) */}
+            {(helpTopic !== "default") && (
+              <div className="border-t pt-4 space-y-2"></div>
+            )}
+
                 <h3 className="text-lg font-bold text-primary">Need assistance?</h3>
                 <p className="text-sm text-muted-foreground">
                   Select a topic below for contextual information on a specific page.
@@ -682,18 +687,6 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                 </Button>
               </>
             )}
-
-            {/* {(helpTopic !== "default") && (
-            <div className="border-t pt-4 space-y-2">
-              <h4 className="font-medium">Still need help?</h4>
-              <Button className="w-full">
-                Go to Full Knowledge Base
-              </Button>
-              <Button variant="link" className="w-full justify-center text-sm">
-                Contact System Support
-              </Button>
-            </div>
-          )} */}
 
           </div>
         </SheetContent>

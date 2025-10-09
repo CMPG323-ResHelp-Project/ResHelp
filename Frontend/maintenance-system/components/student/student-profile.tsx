@@ -7,10 +7,22 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+// NOTE: Select is kept as it is a shadcn component, though not used for students in the final form structure
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select" 
 import { Checkbox } from "@/components/ui/checkbox"
 import { auth } from "@/lib/firebase"
 import { onAuthStateChanged, updatePassword, EmailAuthProvider, reauthenticateWithCredential, signOut } from "firebase/auth"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+
+// Simple Loading Spinner component
+const LoadingSpinner = () => (
+  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+  </svg>
+);
+
 
 interface UserProfile {
   uid?: string
@@ -41,12 +53,32 @@ export function StudentProfile() {
   const [passwordError, setPasswordError] = useState("")
   const [showPasswordChange, setShowPasswordChange] = useState(false)
   const [isEmailChangeAllowed, setIsEmailChangeAllowed] = useState(false)
-
-  // Countdown for email verification
+  
+  // States for the robust email update flow (from staff-profile)
   const [isEmailUpdatePending, setIsEmailUpdatePending] = useState(false)
-  const [countdownSeconds, setCountdownSeconds] = useState(10)
-  const countdownRef = useRef<NodeJS.Timeout | null>(null)
-  const [isVerificationStep, setIsVerificationStep] = useState(false) // NEW: covers the "verify email" state
+  const [isVerificationStep, setIsVerificationStep] = useState(false)
+  const [showEmailConfirmDialog, setShowEmailConfirmDialog] = useState(false);
+  const apiDelayRef = useRef<NodeJS.Timeout | null>(null)
+  
+  // --- NEW: split-address states (residence name, section, room)
+  const [residenceName, setResidenceName] = useState("");
+  const [residenceSection, setResidenceSection] = useState("");
+  const [residenceRoom, setResidenceRoom] = useState("");
+
+  // UPDATED: Use the 5-second message timeout
+  useEffect(() => {
+    if (message) {
+      const timer = setTimeout(() => setMessage(null), 5000); // 5 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [message]);
+
+  // ADDED: Cleanup for the delay timer
+  useEffect(() => {
+    return () => {
+      if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
+    };
+  }, []);
 
   // Fetch profile on mount
   useEffect(() => {
@@ -84,61 +116,28 @@ export function StudentProfile() {
 
     return () => unsubscribe()
   }, [])
-
-  // Countdown effect
-  useEffect(() => {
-    if (isEmailUpdatePending && countdownSeconds > 0) {
-      countdownRef.current = setInterval(() => setCountdownSeconds(prev => prev - 1), 1000)
-    } else if (countdownSeconds === 0 && isEmailUpdatePending) {
-      if (countdownRef.current) clearInterval(countdownRef.current)
-
-      setMessage("You will be logged out to allow update.")
-      setIsVerificationStep(true) // 🔒 keep overlay active during verification step
-
-      // Call backend to update email via Firebase Admin
-      fetch("http://localhost:5229/Profile/update", {
-        method: "POST",
-        headers: { 
-          "Content-Type": "application/json", 
-          "Authorization": `Bearer ${idToken}` 
-        },
-        body: JSON.stringify({ name, surname, email, phone, address, sendEmailVerification: true }),
-      })
-      .then(res => res.json())
-      .then(data => {
-        console.log("Email verification sent:", data)
-        // Auto logout after verification email sent
-        setTimeout(() => {
-          signOut(auth)
-        }, 3000)
-      })
-      .catch(err => setError("Failed to send email verification: " + err.message))
-
-      setIsEmailUpdatePending(false) // stop countdown, move to verification step
-    }
-    return () => { if (countdownRef.current) clearInterval(countdownRef.current) }
-  }, [isEmailUpdatePending, countdownSeconds, idToken, name, surname, email, phone, address])
-
+  
+  // Email Update Cancel Handler
   const handleCancelUpdate = () => {
-    if (countdownRef.current) clearInterval(countdownRef.current)
+    if (apiDelayRef.current) clearTimeout(apiDelayRef.current)
     setIsEmailUpdatePending(false)
     setIsVerificationStep(false)
-    setCountdownSeconds(10)
-    setEmail(profile?.email || "")
+    setEmail(profile?.email || "") // Revert email to original
     setMessage("Email update cancelled.")
   }
+
 
   const handleUpdateProfile = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
     setMessage(null)
-    setPasswordError("")
-    setIsLoading(true)
-  
+    setPasswordError("") // Clear previous password errors
+    setIsLoading(true) 
+
     try {
       const user = auth.currentUser
       if (!user || !idToken) throw new Error("User not authenticated or token missing.")
-  
+
       // Handle password change
       if (showPasswordChange) {
         if (!currentPassword) {
@@ -146,34 +145,77 @@ export function StudentProfile() {
           setIsLoading(false)
           return
         }
-        const credential = EmailAuthProvider.credential(user.email!, currentPassword)
-        await reauthenticateWithCredential(user, credential)
-  
-        if (newPassword !== confirmNewPassword) throw new Error("New passwords do not match.")
+        
+        try {
+          // Attempt reauthentication
+          const credential = EmailAuthProvider.credential(user.email!, currentPassword)
+          await reauthenticateWithCredential(user, credential)
+        } catch (authError: any) {
+          // *** FIX: Handle Firebase reauthentication error (auth/invalid-credential/wrong-password) ***
+          if (authError.code === 'auth/invalid-credential' || authError.code === 'auth/wrong-password') {
+             setPasswordError("Incorrect current password. Please try again.");
+          } else {
+             // For all other Firebase Auth errors during reauthentication
+             setPasswordError("Authentication failed: " + authError.message);
+          }
+          setIsLoading(false);
+          return; // Stop the profile update process
+        }
+        
+        // Continue if reauthentication succeeded
+        if (newPassword !== confirmNewPassword) {
+            setPasswordError("New passwords do not match.");
+            setIsLoading(false);
+            return;
+        }
         await updatePassword(user, newPassword)
         setMessage("Password updated successfully!")
         setCurrentPassword("")
         setNewPassword("")
         setConfirmNewPassword("")
       }
-  
-      // ✅ Handle email change with confirmation
+
+      // Handle email change with dialog
       if (isEmailChangeAllowed && email !== profile?.email) {
-        const confirmed = window.confirm(`Are you sure you want to change your email to ${email}?`)
-        if (!confirmed) {
-          setIsLoading(false)
-          return
-        }
-  
-        setMessage(`Email will be updated in ${countdownSeconds} seconds. Do not exit the page.`)
-        setIsEmailUpdatePending(true)
-        setCountdownSeconds(10)
-        setIsLoading(false)
+        setIsLoading(false) // Unset loading temporarily while dialog is open
+        setShowEmailConfirmDialog(true) // Open dialog
         return
       }
-  
-      // Update other profile info via backend
-      const updateData = { name, surname, email: profile?.email, phone, address }
+
+      // --- VALIDATION AND CONCATENATION LOGIC ---
+      let addressToSend = address; // Default to the current address state (original value if not editing)
+
+      if (isEditing && (profile?.userType === "student" || profile?.userType === "manager")) {
+        
+        // **VALIDATION: Ensure all three split fields are filled if editing**
+        const requiredFields = [residenceName, residenceSection, residenceRoom];
+        const allFieldsFilled = requiredFields.every(field => field && field.trim() !== "");
+
+        if (!allFieldsFilled) {
+            setError("All three Residence Address fields (Name, Section, Room) must be filled to save changes.");
+            setIsLoading(false);
+            return; // Stop the function from proceeding
+        }
+
+        // CONCATENATION: Now that we know they are filled, concatenate them
+        const roomValue = residenceRoom.trim();
+        
+        // **CRITICAL FIX: Prepend "Room " to the room value for the final concatenated string**
+        const formattedRoom = roomValue.startsWith("Room ") ? roomValue : `Room ${roomValue}`;
+
+
+        const parts = [
+            residenceName.trim(), 
+            residenceSection.trim(), 
+            formattedRoom
+        ];
+        
+        addressToSend = parts.join(", "); 
+      }
+
+
+      // Update other profile info via backend (excluding email change)
+      const updateData = { name, surname, email: profile?.email, phone, address: addressToSend }
       const response = await fetch("http://localhost:5229/Profile/update", {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${idToken}` },
@@ -183,25 +225,77 @@ export function StudentProfile() {
         const errData = await response.json()
         throw new Error(errData.error || "Failed to update profile.")
       }
-  
+
+      // Update local states so cancel/next edit reflect latest saved address
+      setAddress(addressToSend) // Update the main address state
+      setProfile(prev => prev ? { ...prev, name, surname, phone, address: addressToSend } : prev)
+
       setMessage("Profile updated successfully!")
       setIsEditing(false)
+      // clear split-address fields after successful save
+      setResidenceName("")
+      setResidenceSection("")
+      setResidenceRoom("")
     } catch (err: any) {
       setError(err.message)
     } finally {
-      setIsLoading(false)
+      setIsLoading(false) // Unset loading at the end of the saving process
     }
   }
-  
+
+  // NEW: toggle edit handler that initializes or reverts split address state
+  const handleToggleEdit = () => {
+    if (!isEditing) {
+      // Entering edit mode: split current address into 3 parts
+      const parts = (profile?.address || "").split(",").map(p => p.trim())
+      
+      // Attempt to clean the "Room " prefix from the third part for display in the input field
+      let roomPart = parts[2] || "";
+      if (roomPart.toLowerCase().startsWith("room ")) {
+          roomPart = roomPart.substring(5).trim(); // Remove "Room "
+      }
+
+      setResidenceName(parts[0] || "")
+      setResidenceSection(parts[1] || "")
+      setResidenceRoom(roomPart) // Set the cleaned room value
+      setError(null)
+      setMessage(null)
+      setIsEditing(true)
+    } else {
+      // Cancelling edit: revert to original profile address and clear split fields
+      setIsEditing(false)
+      setError(null)
+      setMessage(null)
+      // Revert states
+      setName(profile?.name || "")
+      setSurname(profile?.surname || "")
+      setEmail(profile?.email || "")
+      setPhone(profile?.phone || "")
+      setAddress(profile?.address || "")
+      setResidenceName("")
+      setResidenceSection("")
+      setResidenceRoom("")
+      setShowPasswordChange(false) // Hide password fields on cancel
+      setIsEmailChangeAllowed(false) // Reset email change checkbox
+      setPasswordError("") // Clear password error on cancel
+    }
+  }
+
   if (isLoading && !profile) return <div className="p-4 text-center">Loading profile...</div>
-  if (error) return <div className="p-4 text-center text-red-500">{error}</div>
+  if (error && !isEmailUpdatePending && !isVerificationStep) return <div className="p-4 text-center text-red-500">{error}</div>
   if (!profile) return <div className="p-4 text-center">No profile data found.</div>
+
+  // 🔑 Fields are disabled if not editing OR email flow is active OR general saving is in progress
+  const isFieldDisabled = !isEditing || isEmailUpdatePending || isVerificationStep || isLoading;
+  
+  // 🔑 The whole form (opacity/pointer-events) is disabled only during the email update flow
+  const isEmailFlowActive = isEmailUpdatePending || isVerificationStep;
 
   return (
     <div className="relative">
-      {/* Overlay stays active during countdown and verification */}
-      {(isEmailUpdatePending || isVerificationStep) && (
-        <div className="fixed inset-0 z-40" style={{ backgroundColor: "rgba(255,255,255,0.7)" }} />
+      {/* Overlay stays active and disables all interaction during email update process */}
+      {isEmailFlowActive && ( 
+        <div className="fixed inset-0 z-40 bg-white/70" />
       )}
 
       <div className="space-y-6 max-w-2xl mx-auto p-4 md:p-8 relative z-50">
@@ -211,30 +305,37 @@ export function StudentProfile() {
             <CardDescription>Update your personal information and password.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleUpdateProfile} className="space-y-4 pointer-events-none relative">
-              {/* Enable pointer events only when not pending/verification */}
-              <div className={`${(isEmailUpdatePending || isVerificationStep) ? "pointer-events-none" : "pointer-events-auto"}`}>
-                {message && <div className="text-green-500 text-sm text-center">{message}</div>}
-  
-                {/* Countdown */}
-                {isEmailUpdatePending && (
-                  <div className="text-center text-blue-600 font-semibold space-y-1 z-50 relative pointer-events-auto">
-                    <p>Email update in progress...</p>
-                    <p>Time remaining: {Math.floor(countdownSeconds / 60)}:{("0" + (countdownSeconds % 60)).slice(-2)}</p>
-                    <Button type="button" variant="outline" onClick={handleCancelUpdate}>
-                      Cancel Update
-                    </Button>
-                  </div>
+            {/* The wrapper div only manages opacity/pointer-events for the email flow overlay */}
+            <form onSubmit={handleUpdateProfile} className="space-y-4">
+              <div className={`${isEmailFlowActive ? "pointer-events-none opacity-60" : "pointer-events-auto"}`}>
+
+                {/* ERROR ALERT (for general errors) */}
+                {error && (
+                  <Alert className="border-red-200 bg-red-50 text-red-800 mb-4">
+                    <AlertTitle>Error</AlertTitle>
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
                 )}
 
-                {/* Verification Step */}
-                {isVerificationStep && (
-                  <div className="text-center text-red-600 font-semibold space-y-2 z-50 relative pointer-events-auto">
-                    <p>Please verify your new email. Do not close page yet</p>
-                  </div>
+                {/* SUCCESS/UNSUCCESSFUL MESSAGE */}
+                {message && (
+                  <Alert
+                    className={
+                      message.startsWith("Unsuccessful:")
+                        ? "border-red-200 bg-red-50 text-red-800 mb-4"
+                        : "border-green-200 bg-green-50 text-green-800 mb-4"
+                    }
+                  >
+                    <AlertTitle>
+                      {message.startsWith("Unsuccessful:") ? "Unsuccessful" : "Success"}
+                    </AlertTitle>
+                    <AlertDescription>
+                      {message.startsWith("Unsuccessful:") ? message.replace("Unsuccessful: ", "") : message}
+                    </AlertDescription>
+                  </Alert>
                 )}
-  
-                {/* The rest of your profile form unchanged */}
+
+                {/* Profile Form */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* Left Column */}
                   <div className="space-y-4">
@@ -246,7 +347,8 @@ export function StudentProfile() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         required
-                        disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                        // 🔑 Fields are disabled if isFieldDisabled is true
+                        disabled={isFieldDisabled} 
                         className="border-2 border-gray-400 focus:border-blue-500"
                       />
                     </div>
@@ -258,7 +360,7 @@ export function StudentProfile() {
                         value={surname}
                         onChange={(e) => setSurname(e.target.value)}
                         required
-                        disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                        disabled={isFieldDisabled}
                         className="border-2 border-gray-400 focus:border-blue-500"
                       />
                     </div>
@@ -269,7 +371,7 @@ export function StudentProfile() {
                           id="allow-email-change"
                           checked={isEmailChangeAllowed}
                           onCheckedChange={() => setIsEmailChangeAllowed(!isEmailChangeAllowed)}
-                          disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                          disabled={isEmailFlowActive || isLoading || !isEditing} // Also disable checkbox if not editing
                           className="border-gray-400 data-[state=checked]:bg-blue-500"
                         />
                       </div>
@@ -279,7 +381,7 @@ export function StudentProfile() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
-                        disabled={!isEditing || !isEmailChangeAllowed || isEmailUpdatePending || isVerificationStep}
+                        disabled={!isEditing || !isEmailChangeAllowed || isEmailFlowActive || isLoading}
                         className="border-2 border-gray-400 focus:border-blue-500"
                       />
                     </div>
@@ -291,55 +393,89 @@ export function StudentProfile() {
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         required
-                        disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                        disabled={isFieldDisabled}
                         className="border-2 border-gray-400 focus:border-blue-500"
                       />
                     </div>
                   </div>
-  
+
                   {/* Right Column */}
                   <div className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="address">Residence Address</Label>
-                      <Input
-                        id="address"
-                        type="text"
-                        value={address}
-                        onChange={(e) => setAddress(e.target.value)}
-                        required
-                        disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
-                        className="border-2 border-gray-400 focus:border-blue-500"
-                      />
-                    </div>
+                    {/* Student/Manager Address is shown */}
+                    {(profile.userType === "student" || profile.userType === "manager") && (
+                      <div className="space-y-2">
+                        <Label htmlFor="address">Residence Address</Label>
+
+                        {/* WHEN NOT EDITING: single address input (unchanged) */}
+                        {!isEditing && (
+                          <Input
+                            id="address"
+                            type="text"
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            required
+                            disabled={isFieldDisabled}
+                            className="border-2 border-gray-400 focus:border-blue-500"
+                          />
+                        )}
+
+                        {/* WHEN EDITING: show three fields (Residence name, Section, Room) */}
+                        {isEditing && (
+                          <div className="grid grid-cols-1 gap-2">
+                            <Input
+                              id="residence-name"
+                              placeholder="Residence name"
+                              value={residenceName}
+                              onChange={(e) => setResidenceName(e.target.value)}
+                              // Mark as required using native attribute to help user see required fields
+                              required
+                              disabled={isEmailFlowActive || isLoading ? true : false}
+                              className="border-2 border-gray-400 focus:border-blue-500"
+                            />
+                            <Input
+                              id="residence-section"
+                              placeholder="Section"
+                              value={residenceSection}
+                              onChange={(e) => setResidenceSection(e.target.value)}
+                              required
+                              disabled={isEmailFlowActive || isLoading ? true : false}
+                              className="border-2 border-gray-400 focus:border-blue-500"
+                            />
+                            <Input
+                              id="residence-room"
+                              placeholder="Room number (e.g., 12)"
+                              value={residenceRoom}
+                              onChange={(e) => setResidenceRoom(e.target.value)}
+                              required
+                              disabled={isEmailFlowActive || isLoading ? true : false}
+                              className="border-2 border-gray-400 focus:border-blue-500"
+                            />
+                            <p className="text-xs text-muted-foreground">(The room number will automatically be saved as "Room [Number]". **All three must be filled**.)</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {/* Staff/Manager Type is shown as disabled text/input (keeping the structure) */}
                     {profile.userType === "staff" && (
                       <div className="space-y-2">
                         <Label htmlFor="maintenanceType">Maintenance Area</Label>
-                        <Select value={profile.maintenanceType} disabled={!isEditing || isEmailUpdatePending || isVerificationStep}>
-                          <SelectTrigger>
-                            <SelectValue placeholder="Select a service" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="plumber">Plumber</SelectItem>
-                            <SelectItem value="electrician">Electrician</SelectItem>
-                            <SelectItem value="general">General Maintenance</SelectItem>
-                            <SelectItem value="cleaning">Cleaning Services</SelectItem>
-                            <SelectItem value="security">Security</SelectItem>
-                          </SelectContent>
-                        </Select>
+                        {/* Disabled by isEmailFlowActive or isLoading */}
+                        <Input id="maintenanceType" type="text" value={profile.maintenanceType || "N/A"} disabled={isEmailFlowActive || isLoading} />
                       </div>
                     )}
                     {profile.userType === "manager" && (
                       <div className="space-y-2">
                         <Label htmlFor="userType">Role</Label>
-                        <Input id="userType" type="text" value="Residence Manager" disabled />
+                        {/* Disabled by isEmailFlowActive or isLoading */}
+                        <Input id="userType" type="text" value="Residence Manager" disabled={isEmailFlowActive || isLoading} />
                       </div>
                     )}
                   </div>
                 </div>
-  
+
                 <Separator />
-  
-                {/* Conditional password change section */}
+
+                {/* Password change section */}
                 {isEditing && (
                   <div className="space-y-4">
                     <div className="flex items-center space-x-2">
@@ -347,17 +483,18 @@ export function StudentProfile() {
                         id="show-password-change"
                         checked={showPasswordChange}
                         onCheckedChange={() => setShowPasswordChange(!showPasswordChange)}
-                        disabled={isEmailUpdatePending || isVerificationStep}
+                        disabled={isEmailFlowActive || isLoading} // Disable checkbox if saving or in email flow
                         className="border-gray-400 data-[state=checked]:bg-blue-500"
                       />
                       <Label htmlFor="show-password-change">Change Password?</Label>
                     </div>
-  
+
                     {showPasswordChange && (
                       <div className="space-y-4">
                         <Separator />
                         <h3 className="text-lg font-semibold">Change Password</h3>
-                        {passwordError && <p className="text-red-500 text-sm">{passwordError}</p>}
+                        {/* Display the custom password error here */}
+                        {passwordError && <p className="text-red-500 text-sm">{passwordError}</p>} 
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <div className="space-y-2">
                             <Label htmlFor="current-password">Current Password</Label>
@@ -367,7 +504,7 @@ export function StudentProfile() {
                               value={currentPassword}
                               onChange={(e) => setCurrentPassword(e.target.value)}
                               required
-                              disabled={isEmailUpdatePending || isVerificationStep}
+                              disabled={isEmailFlowActive || isLoading}
                               className="border-2 border-gray-400 focus:border-blue-500"
                             />
                           </div>
@@ -379,7 +516,7 @@ export function StudentProfile() {
                               value={newPassword}
                               onChange={(e) => setNewPassword(e.target.value)}
                               required
-                              disabled={isEmailUpdatePending || isVerificationStep}
+                              disabled={isEmailFlowActive || isLoading}
                               className="border-2 border-gray-400 focus:border-blue-500"
                             />
                           </div>
@@ -391,7 +528,7 @@ export function StudentProfile() {
                               value={confirmNewPassword}
                               onChange={(e) => setConfirmNewPassword(e.target.value)}
                               required
-                              disabled={isEmailUpdatePending || isVerificationStep}
+                              disabled={isEmailFlowActive || isLoading}
                               className="border-2 border-gray-400 focus:border-blue-500"
                             />
                           </div>
@@ -400,25 +537,173 @@ export function StudentProfile() {
                     )}
                   </div>
                 )}
-  
+
                 {/* Action Buttons */}
                 <div className="flex justify-end space-x-2">
-                  {!isEmailUpdatePending && !isVerificationStep && (
-                    <Button type="button" variant="outline" onClick={() => setIsEditing(!isEditing)}>
+                  {/* 🔑 CORRECTED: The Cancel/Edit button is only disabled if the Email flow is active */}
+                  {!isEmailFlowActive && ( 
+                    <Button 
+                      type="button" 
+                      variant="outline" 
+                      onClick={handleToggleEdit}
+                      disabled={isLoading} // Disable the button while saving is in progress
+                    >
                       {isEditing ? "Cancel" : "Edit Profile"}
                     </Button>
                   )}
-                  {isEditing && !isEmailUpdatePending && !isVerificationStep && (
+                  {isEditing && !isEmailFlowActive && (
                     <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Saving..." : "Save Changes"}
+                      {isLoading ? (
+                        <>
+                          <LoadingSpinner /> Saving...
+                        </>
+                      ) : (
+                        "Save Changes"
+                      )}
                     </Button>
                   )}
                 </div>
               </div>
-          </form>
-        </CardContent>
-      </Card>
+            </form>
+          </CardContent>
+        </Card>
+        
+        {/* Email Update Progress Message - Displayed on top of the form when pending/verifying */}
+        {isEmailFlowActive && (
+          <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+            <Card className="p-6 text-center border-blue-400 shadow-xl max-w-sm w-full pointer-events-auto">
+              {isEmailUpdatePending && (
+                <>
+                  <div className="flex justify-center mb-4 text-blue-600">
+                    <LoadingSpinner />
+                  </div>
+                  <h3 className="text-xl font-bold text-blue-600">Email Update in Progress...</h3>
+                  <p className="mt-2 text-lg font-semibold text-gray-700">
+                    Please wait. Do not close this page.
+                  </p>
+                </>
+              )}
+              {isVerificationStep && (
+                <>
+                  <h3 className="text-xl font-bold text-green-600">Verification Link Sent!</h3>
+                  <p className="mt-2 text-lg font-semibold text-gray-700">
+                    You have successfully started the email change.
+                  </p>
+                  <p className="mt-1 text-sm text-gray-500">
+                    Please check your new email address **{email}** for a verification link. You will be logged out now.
+                  </p>
+                </>
+              )}
+            </Card>
+          </div>
+        )}
+      </div>
+
+      {/* Email Update Confirmation Dialog */}
+      <Dialog open={showEmailConfirmDialog} onOpenChange={() => setShowEmailConfirmDialog(false)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-xl font-bold flex items-center gap-2">
+              Confirm Email Update
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to change your email to **{email}**? This action will trigger verification and **log you out**.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="flex justify-end gap-3 mt-6">
+            <Button variant="outline" onClick={() => setShowEmailConfirmDialog(false)} disabled={isLoading}>
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                setError(null)
+                setMessage(null)
+                setIsLoading(true) // Start loading state for the API call
+                setShowEmailConfirmDialog(false); // Close dialog
+                
+                // **STEP 1: Initiate Email Update Pending State (Loading/Delay)**
+                setIsEmailUpdatePending(true);
+                
+                try {
+                  // Re-calculate addressToSend for the API call (important if address changed alongside email)
+                  let addressToSend = profile?.address || "";
+                  if (isEditing && (profile?.userType === "student" || profile?.userType === "manager")) {
+                     // Check for required fields again 
+                    const requiredFields = [residenceName, residenceSection, residenceRoom];
+                    const allFieldsFilled = requiredFields.every(field => field && field.trim() !== "");
+
+                    if (!allFieldsFilled) {
+                        throw new Error("Cannot update email: Residence address fields are incomplete.");
+                    }
+
+                    // CRITICAL FIX: Re-calculate the concatenated string with the "Room " prefix
+                    const roomValue = residenceRoom.trim();
+                    const formattedRoom = roomValue.startsWith("Room ") ? roomValue : `Room ${roomValue}`;
+
+                    const parts = [
+                        residenceName.trim(), 
+                        residenceSection.trim(), 
+                        formattedRoom
+                    ];
+                    addressToSend = parts.join(", "); 
+                  }
+
+                  const res = await fetch("http://localhost:5229/Profile/update", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                      "Authorization": `Bearer ${idToken}`
+                    },
+                    body: JSON.stringify({ name, surname, email, phone, address: addressToSend, sendEmailVerification: true }),
+                  })
+
+                  const data = await res.json()
+
+                  if (!res.ok) {
+                    // **Failure Handler**
+                    if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
+                    setIsEmailUpdatePending(false); // Stop pending state
+                    
+                    if (data?.error?.includes("EMAIL_EXISTS")) {
+                      setMessage("Unsuccessful: This email already exists.")
+                    } else {
+                      setError(data?.error || "Failed to update email.")
+                    }
+                  } else {
+                    // **Success Handler**
+                    setIsEditing(false)
+                    
+                    // Set the 6-second delay before showing the verification message/logging out
+                    apiDelayRef.current = setTimeout(() => {
+                        setIsEmailUpdatePending(false); // Remove loading screen
+                        setIsVerificationStep(true); // Show verification message
+                        
+                        // Log out after a short pause (e.g., 3 seconds) for the user to read the message
+                        setTimeout(() => {
+                            signOut(auth).then(() => {
+                                window.location.href = "/"
+                            })
+                        }, 3000); 
+                        
+                    }, 6000);
+                  }
+                } catch (err: any) {
+                  // **Error Handler**
+                  if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
+                  setIsEmailUpdatePending(false); // Stop pending state
+                  setError(err.message)
+                } finally {
+                  setIsLoading(false) // Stop loading after API call finishes or errors out
+                }
+              }}
+              disabled={isLoading}
+            >
+              {isLoading ? <><LoadingSpinner /> Updating...</> : "Confirm"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
-    </div>
-  )
+  );
 }

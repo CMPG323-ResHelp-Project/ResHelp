@@ -11,8 +11,10 @@ import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
-import { Upload, AlertTriangle, ArrowLeft } from "lucide-react"
-
+// 🔑 ADDED: Clock and Image as ImageIcon for loading/success UI
+import { Upload, AlertTriangle, ArrowLeft, Clock, Image as ImageIcon } from "lucide-react"
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+import { firebase2 } from "@/lib/firebase2";
 // NOTE: Ensure your Firebase auth library is correctly imported here
 // import { auth } from "@/lib/firebase" 
 
@@ -27,11 +29,15 @@ export default function ReportIssue() {
   const router = useRouter()
   const [idToken, setIdToken] = useState<string | null>(null)
   const [isLocationLoading, setIsLocationLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null)     
-  const [message, setMessage] = useState<string | null>(null) 
+  const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
+  const [imageUrl, setImageUrl] = useState<string>(""); // store uploaded image URL
 
-   // ✅ Populate address automatically on mount
-   useEffect(() => {
+  // 🔑 EXISTING: State for image uploading
+  const [imageUploading, setImageUploading] = useState(false);
+
+  // ✅ Populate address automatically on mount
+  useEffect(() => {
     const fetchUserAddress = async () => {
       setIsLocationLoading(true);
       try {
@@ -48,7 +54,7 @@ export default function ReportIssue() {
 
         const res = await fetch(`http://localhost:5229/Profile?email=${user.email}`, {
           method: "GET",
-          headers: { 
+          headers: {
             "Content-Type": "application/json",
             "Authorization": `Bearer ${token}`
           },
@@ -78,10 +84,16 @@ export default function ReportIssue() {
     setError(null)
     setMessage(null)
 
+    // 🔑 NEW: Prevent submission if image is still uploading
+    if (imageUploading) {
+      setError("Please wait for the image upload to complete before submitting.")
+      return
+    }
+
     // Client-side validation
     if (!title || !description || !category || !priority || !location) {
-        setError("Please fill out all required fields.")
-        return
+      setError("Please fill out all required fields.")
+      return
     }
 
     setIsSubmitting(true)
@@ -90,64 +102,88 @@ export default function ReportIssue() {
       const { auth } = await import("@/lib/firebase");
       const user = auth.currentUser;
       if (!user) throw new Error("User not logged in");
-  
+
       const idToken = await user.getIdToken();
-  
-// Get the display name and split it
-const fullName = user.displayName || "Unknown User";
-const nameParts = fullName.trim().split(" ");
-const firstName = nameParts[0];
-const lastName = nameParts.slice(1).join(" ");
-  
+
+      // Get the display name and split it
+      const fullName = user.displayName || "Unknown User";
+      const nameParts = fullName.trim().split(" ");
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(" ");
+
       const payload = {
-          title,
-          description,
-          category,
-          priority,
-          location,
-          isUrgent,
-          imageUrl: "",
-          name: firstName,
-          surname: lastName,
-          reporterEmail: user.email || "unknown@reshelp.com",
+        title,
+        description,
+        category,
+        priority,
+        location,
+        isUrgent,
+        imageUrl,
+        name: firstName,
+        surname: lastName,
+        reporterEmail: user.email || "unknown@reshelp.com",
       };
-  
+
       const response = await fetch("http://localhost:5229/Issues/report", {
-          method: "POST",
-          headers: {
-              "Content-Type": "application/json",
-              "Authorization": `Bearer ${idToken}`,
-          },
-          body: JSON.stringify(payload),
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${idToken}`,
+        },
+        body: JSON.stringify(payload),
       });
-  
+
       const responseText = await response.text();
       if (!response.ok) {
-          let data: { error?: string; message?: string } = {};
-          try { data = JSON.parse(responseText); } catch {}
-          throw new Error(data.error || data.message || responseText);
+        let data: { error?: string; message?: string } = {};
+        try { data = JSON.parse(responseText); } catch { }
+        throw new Error(data.error || data.message || responseText);
       }
-  
+
       setMessage("Issue reported successfully! Redirecting to dashboard...");
       setTimeout(() => router.push("/student/dashboard"), 2000);
-  
-  } catch (err: any) {
+
+    } catch (err: any) {
       console.error("Error reporting issue:", err);
       setError(err.message || "An unknown error occurred during submission.");
-  } finally {
+    } finally {
       setIsSubmitting(false);
-  }
-  
-  }
-  
-
-  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0]
-    if (file) {
-      console.log("Image uploaded:", file.name)
-      // Handle image upload logic here (e.g., upload to cloud storage)
     }
+
   }
+
+  // 🔑 UPDATED: Clear URL and set error on failure
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+
+    setImageUrl(""); // Clear previous URL immediately
+    setError(null); // Clear previous errors
+
+    if (!file) return;
+
+    try {
+      setImageUploading(true); // 🚨 disable submit while uploading
+      const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+      const { firebase2 } = await import("@/lib/firebase2");
+
+      const storage = getStorage(firebase2);
+      const storageRef = ref(storage, `issue-images/${file.name}-${Date.now()}`);
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setImageUrl(url);
+      console.log("Image uploaded:", url);
+    } catch (err) {
+      console.error("Image upload failed:", err);
+      setImageUrl(""); // Ensure URL is empty on failure
+      setError("Failed to upload image. Please try again or skip the photo.");
+    } finally {
+      setImageUploading(false);
+    }
+  };
+
+  // 🔑 NEW: Combined state for disabling the entire form
+  const isFormDisabled = isSubmitting || imageUploading || isLocationLoading;
+
 
   return (
     <div className="min-h-screen bg-background">
@@ -159,6 +195,7 @@ const lastName = nameParts.slice(1).join(" ");
             variant="outline"
             onClick={() => router.push("/student/dashboard")}
             className="flex items-center space-x-2"
+            disabled={isSubmitting}
           >
             <ArrowLeft className="h-4 w-4" />
             <span>Back to Dashboard</span>
@@ -178,7 +215,7 @@ const lastName = nameParts.slice(1).join(" ");
           </CardHeader>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-6">
-              
+
               {/* Error/Success Messages */}
               {error && (
                 <div className="p-3 bg-red-100 border border-red-400 text-red-700 rounded-lg">
@@ -201,6 +238,7 @@ const lastName = nameParts.slice(1).join(" ");
                   checked={isUrgent}
                   onChange={(e) => setIsUrgent(e.target.checked)}
                   className="h-4 w-4 text-red-600"
+                  disabled={isFormDisabled} 
                 />
                 <div className="flex items-center space-x-2">
                   <AlertTriangle className="h-5 w-5 text-red-600" />
@@ -213,7 +251,7 @@ const lastName = nameParts.slice(1).join(" ");
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="category">Issue Category</Label>
-                  <Select value={category} onValueChange={setCategory} required>
+                  <Select value={category} onValueChange={setCategory} required disabled={isFormDisabled}> {/* 🔑 DISABLED: Select Category */}
                     <SelectTrigger>
                       <SelectValue placeholder="Select category" />
                     </SelectTrigger>
@@ -231,7 +269,7 @@ const lastName = nameParts.slice(1).join(" ");
 
                 <div className="space-y-2">
                   <Label htmlFor="priority">Priority Level</Label>
-                  <Select value={priority} onValueChange={setPriority} required>
+                  <Select value={priority} onValueChange={setPriority} required disabled={isFormDisabled}> {/* 🔑 DISABLED: Select Priority */}
                     <SelectTrigger>
                       <SelectValue placeholder="Select priority" />
                     </SelectTrigger>
@@ -246,22 +284,24 @@ const lastName = nameParts.slice(1).join(" ");
 
               <div className="space-y-2">
                 <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  placeholder="e.g., Room 205, Kitchen, Bathroom"
-                  value={location}
-                  onChange={(e) => setLocation(e.target.value)}
-                  disabled={isLocationLoading} 
-                  required
-                />
-                 {isLocationLoading && (
-    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-      <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
-      </svg>
-    </div>
-    )}
+                <div className="relative">
+                  <Input
+                    id="location"
+                    placeholder="e.g., Room 205, Kitchen, Bathroom"
+                    value={location}
+                    onChange={(e) => setLocation(e.target.value)}
+                    disabled={isFormDisabled} 
+                    required
+                  />
+                  {isLocationLoading && (
+                    <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                      <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path>
+                      </svg>
+                    </div>
+                  )}
+                </div>
               </div>
 
               <div className="space-y-2">
@@ -272,6 +312,7 @@ const lastName = nameParts.slice(1).join(" ");
                   value={title}
                   onChange={(e) => setTitle(e.target.value)}
                   required
+                  disabled={isFormDisabled} 
                 />
               </div>
 
@@ -284,23 +325,47 @@ const lastName = nameParts.slice(1).join(" ");
                   onChange={(e) => setDescription(e.target.value)}
                   rows={4}
                   required
+                  disabled={isFormDisabled} 
                 />
               </div>
 
+              {/* 🔑 UPDATED: Image Upload Section with Loading State */}
               <div className="space-y-2">
                 <Label htmlFor="image">Upload Photo (Optional)</Label>
-                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center">
-                  <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground mb-2">Upload a photo to help illustrate the issue</p>
+                <div className="border-2 border-dashed border-border rounded-lg p-6 text-center space-y-2">
+
+                  {imageUploading ? (
+                    // Loading State
+                    <div className="flex flex-col items-center">
+                      <Clock className="h-8 w-8 animate-spin mx-auto text-blue-500" />
+                      <p className="text-sm text-blue-600 mt-2">Uploading image, please wait...</p>
+                    </div>
+                  ) : imageUrl ? (
+                    // Success State (Image Uploaded)
+                    <div className="flex flex-col items-center">
+                      <ImageIcon className="h-8 w-8 mx-auto mb-2 text-green-500" />
+                      <p className="text-sm font-medium text-green-700">Image successfully attached.</p>
+                      <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline truncate w-full px-4" title={imageUrl}>View Uploaded Image</a>
+                    </div>
+                  ) : (
+                    // Initial/No Image State
+                    <div className="flex flex-col items-center">
+                      <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground mb-2">Upload a photo to help illustrate the issue</p>
+                    </div>
+                  )}
+
                   <Input
                     id="image"
                     type="file"
                     accept="image/*"
                     onChange={handleImageUpload}
                     className="max-w-xs mx-auto"
+                    disabled={isFormDisabled} 
                   />
                 </div>
               </div>
+              {/* END UPDATED Image Upload Section */}
 
               <div className="flex space-x-4">
                 <Button
@@ -308,11 +373,18 @@ const lastName = nameParts.slice(1).join(" ");
                   variant="outline"
                   onClick={() => router.push("/student/dashboard")}
                   className="flex-1"
+                  disabled={isFormDisabled} 
                 >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSubmitting} className="flex-1">
-                  {isSubmitting ? "Submitting..." : "Submit Issue Report"}
+                <Button
+                  type="submit"
+                  // 🔑 UPDATED: Disable if submitting OR uploading
+                  disabled={isFormDisabled}
+                  className="flex-1"
+                >
+                  {/* 🔑 UPDATED: Show appropriate text based on state */}
+                  {imageUploading ? "Waiting for Image..." : isSubmitting ? "Submitting..." : "Submit Issue Report"}
                 </Button>
               </div>
             </form>

@@ -4,7 +4,7 @@ import { Navigation } from "@/components/navigation"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Plus, Clock, CheckCircle, AlertTriangle, ListFilter, X, MapPin, ClipboardList } from "lucide-react"
+import { Plus, Clock, CheckCircle, AlertTriangle, ListFilter, X, MapPin, ClipboardList, ArrowRight, Image as ImageIcon, Users, Search } from "lucide-react" 
 import { useRouter } from "next/navigation"
 import { useState, useEffect, useCallback, useMemo } from "react"
 import {
@@ -20,22 +20,28 @@ import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+// 🔑 NEW: Import Dialog components for the confirmation modal
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog"
 
 
 // Mock-up of a simplified Issue type based on the backend response
 interface Issue {
     Id: string;
+    Status: "Pending" | "Assigned" | "In-Progress" | "Resolved" | "Cancelled";
     Title: string;
     Description: string;
-    Status: "Pending" | "In-Progress" | "Resolved" | "Cancelled";
     Priority: "High" | "Medium" | "Low";
     Category: string; // Issue category (e.g., Plumbing, Electrical, Structural)
     Location: string; // Specific location (e.g., House 3A, Room 204)
     IsUrgentSafetyHazard: boolean; // Urgent safety hazard flag
     ReportedAt: string;
     UpdatedAt: string;
-    ReporterEmail: string;
     Rating?: number;
+    ReporterEmail: string;
+    ImageUrl: string;
+    DriverName: string; 
+    DriverSurname: string;
+    DriverPhone: string;
 }
 
 // Helper to format date and time
@@ -73,15 +79,93 @@ function formatDateTime(timestamp: any): string {
 }
 
 
+// ------------------------------------------------------------------------------------
+// 🆕 NEW: Rating Prompt Modal Component (Issue History Container)
+// ------------------------------------------------------------------------------------
 
-
-// --- Edit Issue Modal Component ---
-interface EditIssueModalProps {
+interface RatingPromptModalProps {
     issue: Issue;
     onClose: () => void;
-    onSave: (id: string, form: EditIssueForm) => Promise<void>;
+    onSubmitRating: (id: string, rating: number) => Promise<void>;
 }
 
+const RatingPromptModal: React.FC<RatingPromptModalProps> = ({ issue, onClose, onSubmitRating }) => {
+    const [selectedRating, setSelectedRating] = useState<number | null>(null);
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = async () => {
+        if (selectedRating !== null) {
+            setIsSubmitting(true);
+            // onSubmitRating is expected to call onClose after success
+            await onSubmitRating(issue.Id, selectedRating);
+            // setIsSubmitting will be set to false if onSubmitRating doesn't close the modal on error
+            // However, since we expect it to close on success, we don't strictly need to set it to false here.
+            // But leaving it for a robust catch scenario:
+            setIsSubmitting(false); 
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+            <Card className="w-full max-w-sm">
+                <CardHeader className="text-center">
+                    <CardTitle className="text-xl text-primary flex items-center justify-center gap-2">
+                        <CheckCircle className="h-5 w-5 text-green-500"/>
+                        Rate Your Service
+                    </CardTitle>
+                    <p className="text-sm text-muted-foreground mt-2">Please rate the resolution for:</p>
+                    <p className="font-semibold text-base truncate">{issue.Title}</p>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    
+                    <div className="flex justify-center items-center gap-1 text-4xl">
+                        {Array.from({ length: 5 }, (_, i) => i + 1).map((star) => (
+                            <button
+                                key={star}
+                                onClick={() => setSelectedRating(star)}
+                                className={`transition-colors ${star <= (selectedRating || 0) ? "text-yellow-400" : "text-gray-300 hover:text-yellow-300"}`}
+                                aria-label={`${star} star rating`}
+                                // Ensure stars are not clickable if already submitting
+                                disabled={isSubmitting} 
+                            >
+                                ★
+                            </button>
+                        ))}
+                    </div>
+                    
+                    <div className="flex gap-2">
+                        <Button 
+                            variant="default" 
+                            className="flex-1" 
+                            onClick={handleSubmit} 
+                            disabled={selectedRating === null || isSubmitting}
+                        >
+                            {isSubmitting ? "Submitting..." : `Submit ${selectedRating || 0} Star${selectedRating === 1 ? '' : 's'}`}
+                        </Button>
+                        <Button 
+                            variant="outline" 
+                            onClick={onClose} 
+                            className="flex-1"
+                            disabled={isSubmitting} // 🔑 FIX: Disable close button while submitting
+                        >
+                            Rate Later (Close)
+                        </Button>
+                    </div>
+                    
+                    <div className="text-center text-xs text-muted-foreground">
+                        <span className="font-semibold">Note:</span> You can also rate this issue anytime in the **Issue History** section below.
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+    );
+};
+
+
+// ------------------------------------------------------------------------------------
+// --- Edit Issue Modal Component (EXISTING) ---
+// ------------------------------------------------------------------------------------
+// 🔑 UPDATED: Added ImageUrl to the form object sent to onSave
 interface EditIssueForm {
     Title: string;
     Description: string;
@@ -89,16 +173,29 @@ interface EditIssueForm {
     Location: string;
     Priority: "High" | "Medium" | "Low";
     IsUrgentSafetyHazard: boolean;
+    ImageUrl: string; // The determined URL for the backend
+}
+
+interface EditIssueModalProps {
+    issue: Issue;
+    onClose: () => void;
+    // 🔑 UPDATED: onSave now expects the EditIssueForm which includes ImageUrl
+    onSave: (id: string, form: EditIssueForm) => Promise<void>;
 }
 
 const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave }) => {
-    // Only allow editing if the status is "Pending"
+    // 🔑 FIX: Case-insensitive check on Status
     if (issue.Status.toLowerCase() !== 'pending') {
         onClose();
         return null;
     }
 
-    const [editForm, setEditForm] = useState<EditIssueForm>({
+    // 🔑 UPDATED: States for file management
+    const [newImageFile, setNewImageFile] = useState<File | null>(null);
+    const [newImageUrl, setNewImageUrl] = useState<string>(''); // Holds the URL if a new file is uploaded
+    const [isUploading, setIsUploading] = useState(false); // Used to disable the submit button
+    
+    const [editForm, setEditForm] = useState<Omit<EditIssueForm, 'ImageUrl'>>({ // Omit ImageUrl for form fields
         Title: issue.Title,
         Description: issue.Description,
         Category: issue.Category,
@@ -123,10 +220,68 @@ const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave 
         setEditForm(prev => ({ ...prev, Category: value }));
     };
 
+    // 🔑 UPDATED: Handle file selection, upload, and URL generation
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) {
+            setNewImageFile(null);
+            setNewImageUrl('');
+            return;
+        }
+        
+        setNewImageFile(file);
+        setNewImageUrl(''); // Clear previous upload URL before starting
+
+        try {
+            setIsUploading(true); 
+            // Importing Firebase storage utilities
+            const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+            const { firebase2 } = await import("@/lib/firebase2"); // Assumed correct import
+
+            const storage = getStorage(firebase2);
+            // Use file name and current timestamp for a unique path
+            const storageRef = ref(storage, `issue-images/${file.name}-${Date.now()}`);
+            
+            await uploadBytes(storageRef, file);
+            const url = await getDownloadURL(storageRef);
+            
+            setNewImageUrl(url); // Set the new URL
+            console.log("Image uploaded successfully:", url);
+
+        } catch (err) {
+            console.error("Image upload failed:", err);
+            setNewImageFile(null); // Clear file selection and URL on failure
+            setNewImageUrl('');
+            alert("Failed to upload image. Please check the file and try again.");
+        } finally {
+            setIsUploading(false);
+        }
+    };
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        
+        // Disable submission if still uploading
+        if (isUploading) {
+            alert("Please wait for the image upload to complete.");
+            return;
+        }
+
         setIsSaving(true);
-        await onSave(issue.Id, editForm);
+        
+        // 🔑 UPDATED: Determine the final URL to submit
+        const finalImageUrl = newImageUrl // 1. Use newly uploaded URL
+            || issue.ImageUrl // 2. Use existing URL if no new one was uploaded
+            || ""; // 3. Default to empty string
+            
+        // Construct the full form object including the ImageUrl
+        const fullForm: EditIssueForm = {
+            ...editForm,
+            ImageUrl: finalImageUrl
+        };
+
+        await onSave(issue.Id, fullForm);
+        
         setIsSaving(false);
         // Note: onClose is handled by onSave after successful update
     };
@@ -150,6 +305,80 @@ const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave 
                             <Label htmlFor="Description">Detailed Description</Label>
                             <Textarea id="Description" value={editForm.Description} onChange={handleChange} required rows={4} />
                         </div>
+
+                        {/* Image Display and Replacement Section */}
+                        <div className="space-y-2 p-3 border rounded-lg bg-gray-50">
+                            <Label htmlFor="issueImage" className="flex items-center gap-2">
+                                <ImageIcon className="h-4 w-4" /> Issue Image
+                            </Label>
+                            
+                            {/* Display Existing Image in a compact format */}
+                            {(issue.ImageUrl || newImageUrl) ? (
+                                <div className="flex items-center gap-4 p-2 border rounded-lg bg-white/70">
+                                    {/* Compact Thumbnail - show new URL if uploaded, else show existing */}
+                                    <div className="w-20 h-20 overflow-hidden rounded-md border shrink-0">
+                                        <img 
+                                            src={newImageUrl || issue.ImageUrl} 
+                                            alt={`Issue ${issue.Id.slice(0, 8)}`} 
+                                            className="object-cover w-full h-full"
+                                        />
+                                    </div>
+                                    <div className="flex-1 space-y-1 min-w-0">
+                                        <p className="text-sm font-semibold text-foreground">
+                                            {newImageUrl ? "New Image Uploaded" : "Current Image Attached"}
+                                        </p>
+                                        <a 
+                                            href={newImageUrl || issue.ImageUrl} 
+                                            target="_blank" 
+                                            rel="noopener noreferrer" 
+                                            className="text-sm text-blue-600 hover:underline flex items-center gap-1 truncate"
+                                        >
+                                            View Full Image (Link)
+                                        </a>
+                                        <p className="text-xs text-muted-foreground truncate" title={newImageUrl || issue.ImageUrl}>
+                                            URL: {(newImageUrl || issue.ImageUrl).substring(0, 40)}...
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="text-center py-4 border-dashed border-2 rounded-lg text-muted-foreground">
+                                    <ImageIcon className="h-6 w-6 mx-auto mb-2" />
+                                    <p>No image currently attached.</p>
+                                </div>
+                            )}
+
+                            {/* Image Replacement/Upload Alternative */}
+                            <div className="pt-2">
+                                <Label htmlFor="imageUpload" className="text-sm font-medium">
+                                    {issue.ImageUrl ? "Replace Image" : "Upload Image"}
+                                </Label>
+                                <Input 
+                                    id="imageUpload" 
+                                    type="file" 
+                                    accept="image/*" 
+                                    onChange={handleFileChange}
+                                    className="mt-1"
+                                    disabled={isUploading} // Disable while an upload is in progress
+                                />
+                                {isUploading && (
+                                    <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                                        <Clock className="h-3 w-3 animate-spin" /> Uploading image...
+                                    </p>
+                                )}
+                                {newImageFile && !isUploading && newImageUrl && (
+                                    <p className="text-xs text-green-600 mt-1">
+                                        New image ready for submission.
+                                    </p>
+                                )}
+                                {newImageFile && !isUploading && !newImageUrl && (
+                                    <p className="text-xs text-red-600 mt-1">
+                                        Image upload failed. Please try selecting the file again.
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                        {/* END Image Section */}
+
                         <div className="grid grid-cols-2 gap-4">
                             <div className="space-y-2">
                                 <Label htmlFor="Category">Category</Label>
@@ -205,8 +434,8 @@ const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave 
                             </div>
                         </div>
 
-                        <Button type="submit" className="w-full" disabled={isSaving}>
-                            {isSaving ? "Saving..." : "Save Changes"}
+                        <Button type="submit" className="w-full" disabled={isSaving || isUploading}>
+                            {isUploading ? "Waiting for Image..." : isSaving ? "Saving..." : "Save Changes"}
                         </Button>
                     </form>
                 </CardContent>
@@ -216,24 +445,31 @@ const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave 
 };
 
 
+// ------------------------------------------------------------------------------------
 // --- Main Dashboard Component ---
+// ------------------------------------------------------------------------------------
 export default function MyIssuesDashboard() {
     const router = useRouter()
     const [issues, setIssues] = useState<Issue[]>([])
     const [loading, setLoading] = useState(true)
     const [error, setError] = useState<string | null>(null)
-    const [issueMessage, setIssueMessage] = useState<string | null>(null) // 🆕 New state for success messages
+    const [issueMessage, setIssueMessage] = useState<string | null>(null) 
     const [editingIssue, setEditingIssue] = useState<Issue | null>(null);
     const [activeSort, setActiveSort] = useState<"ReportedAt_desc" | "ReportedAt_asc">("ReportedAt_desc");
     const [activeStatusFilter, setActiveStatusFilter] = useState<string | null>(null);
     const [historySort, setHistorySort] = useState<"UpdatedAt_desc" | "UpdatedAt_asc">("UpdatedAt_desc");
     const [historyStatusFilter, setHistoryStatusFilter] = useState<string | null>(null);
+    const [issueToRate, setIssueToRate] = useState<Issue | null>(null); // 🆕 New state for the rating modal
+    
+    // 🔑 NEW: State to manage the issue being confirmed for cancellation
+    const [issueToCancel, setIssueToCancel] = useState<Issue | null>(null);
+    
+    // 🔑 UPDATED: State to manage the search query (used by both sections)
+    const [searchQuery, setSearchQuery] = useState("");
 
     const submitRating = async (issueId: string, rating: number) => {
       try {
-        // 🆕 Ask user to confirm
-        const confirmed = window.confirm(`Are you sure you want to rate this issue with ${rating} star(s)?`)
-        if (!confirmed) return // 🚫 user cancelled → don’t submit
+        // 🔑 FIX: Removed window.confirm as the modal handles selection/confirmation
     
         const { auth } = await import("@/lib/firebase")
         const user = auth.currentUser
@@ -266,7 +502,9 @@ export default function MyIssuesDashboard() {
         // 🆕 Show success message instead of just refreshing
         setIssueMessage(`Issue #${issueId.slice(0, 8)} rated ${rating} star(s).`)
         setTimeout(() => setIssueMessage(null), 5000)
-    
+        
+        setIssueToRate(null); // 🆕 Close the rating prompt modal on success
+
         fetchIssues() // refresh to show updated rating
     
       } catch (err: any) {
@@ -280,6 +518,8 @@ export default function MyIssuesDashboard() {
         switch (status.toLowerCase()) {
             case "pending":
                 return <Clock className="h-4 w-4" />
+            case "assigned": // 🔑 NEW STATUS ICON
+                return <Users className="h-4 w-4" />
             case "in-progress":
                 return <AlertTriangle className="h-4 w-4" />
             case "resolved":
@@ -295,6 +535,8 @@ export default function MyIssuesDashboard() {
         switch (status.toLowerCase()) {
             case "pending":
                 return "bg-yellow-100 text-yellow-800 border-yellow-200"
+            case "assigned": // 🔑 NEW STATUS COLOR (Teal)
+                return "bg-teal-100 text-teal-800 border-teal-200"
             case "in-progress":
                 return "bg-blue-100 text-blue-800 border-blue-200"
             case "resolved":
@@ -350,7 +592,8 @@ export default function MyIssuesDashboard() {
                 Id: item.Id || item.id || crypto.randomUUID(), // Fallback for Id
                 Title: item.Title || "No Title",
                 Description: item.Description || "No description provided.",
-                Status: (item.Status as Issue['Status']) || "Pending",
+                // Status is kept as-is from backend (e.g., "Pending", "assigned")
+                Status: (item.Status as Issue['Status']) || "Pending", 
                 Priority: (item.Priority || "Low").charAt(0).toUpperCase() + (item.Priority || "Low").slice(1).toLowerCase() as Issue['Priority'],
                 Category: item.Category || "General",
                 Location: item.Location || "Unknown",
@@ -360,9 +603,24 @@ export default function MyIssuesDashboard() {
                 UpdatedAt: item.UpdatedAt || item.ReportedAt || new Date().toISOString(),
                 ReporterEmail: item.ReporterEmail || "",
                 Rating: item.Rating ?? null, 
+                // 🔑 ADDED: Mapping the ImageUrl property
+                ImageUrl: item.ImageUrl || "", 
+                // 🔑 NEW: Mapping Driver properties
+                DriverName: item.DriverName || "",
+                DriverSurname: item.DriverSurname || "",
+                DriverPhone: item.DriverPhone || "",
             }));
 
             setIssues(formattedIssues)
+            
+            // 🆕 Check for the first unrated resolved issue and set it for the modal
+            const unratedResolvedIssue = formattedIssues.find(
+                (i) => i.Status.toLowerCase() === "resolved" && i.Rating === null
+            );
+            if (unratedResolvedIssue) {
+                setIssueToRate(unratedResolvedIssue);
+            }
+
         } catch (err: any) {
             console.error(err)
             setError(err.message || "Failed to load issues")
@@ -379,15 +637,16 @@ export default function MyIssuesDashboard() {
     // --- CRUD Handlers ---
 
     const handleEditIssue = (issue: Issue) => {
-        // Only allow editing if the status is "Pending"
+        // 🔑 FIX: Case-insensitive check on Status is already correct, but the message is clearer.
         if (issue.Status.toLowerCase() === 'pending') {
             setEditingIssue(issue);
         } else {
-            alert(`Issue is ${issue.Status.toLowerCase()}. Only Pending issues can be edited.`);
+            // Updated alert message to be dynamic and avoid misleading hardcoded strings
+            alert(`Issue is currently '${issue.Status}'. Only 'Pending' issues can be edited.`);
         }
     }
 
-    // 🔑 IMPLEMENTED UPDATE LOGIC HERE
+    // 🔑 UPDATED: handleSaveEdit now expects the full form including ImageUrl
     const handleSaveEdit = async (issueId: string, form: EditIssueForm) => {
         setError(null); // Clear previous errors
         setIssueMessage(null); // Clear previous messages
@@ -404,7 +663,8 @@ export default function MyIssuesDashboard() {
                 category: form.Category,
                 priority: form.Priority.toLowerCase(), // Ensure lowercase for backend consistency
                 location: form.Location,
-                imageUrl: "", // Not editable in modal, but required by DTO
+                // 🔑 UPDATED: Use the ImageUrl provided by the modal's form, which is guaranteed to be correct/new
+                imageUrl: form.ImageUrl, 
                 isUrgent: form.IsUrgentSafetyHazard, // Maps to C# IssueDto.IsUrgent
             };
 
@@ -435,10 +695,17 @@ export default function MyIssuesDashboard() {
         }
     }
     // 🔑 END UPDATE LOGIC
+    
+    // 🔑 UPDATED: Initial handler to open the dialog
+    const handleConfirmCancel = (issue: Issue) => {
+        setIssueToCancel(issue);
+    };
 
+    // 🔑 UPDATED: Core logic for cancellation, called from the Dialog
     const handleCancelIssue = async (issueId: string) => {
-        const confirmation = window.confirm(`Are you sure you want to cancel issue #${issueId}? This action will update its status to 'Cancelled'.`);
-        if (!confirmation) return;
+        setIssueToCancel(null); // Close the dialog immediately upon confirmation
+        setError(null);
+        setIssueMessage(null); 
 
         try {
             const { auth } = await import("@/lib/firebase")
@@ -461,8 +728,8 @@ export default function MyIssuesDashboard() {
             }
 
              // ✅ Show success message in UI, not alert
-    setIssueMessage(`Issue #${issueId.slice(0, 8)} cancelled successfully.`)
-    setTimeout(() => setIssueMessage(null), 5000)
+            setIssueMessage(`Issue #${issueId.slice(0, 8)} cancelled successfully.`)
+            setTimeout(() => setIssueMessage(null), 5000)
             fetchIssues(); // Refresh the list
         } catch (err: any) {
             setError(err.message || "An error occurred while cancelling the issue.");
@@ -480,6 +747,7 @@ export default function MyIssuesDashboard() {
     ): Issue[] => {
         let filteredData = data;
 
+        // 🔑 FIX: Ensure filter comparison uses toLowerCase()
         if (statusFilter) {
             filteredData = data.filter(req => req.Status.toLowerCase() === statusFilter.toLowerCase());
         }
@@ -500,27 +768,53 @@ export default function MyIssuesDashboard() {
 
 
     const activeIssues = useMemo(() => {
-        const active = issues.filter((i) => ["pending", "in-progress"].includes(i.Status.toLowerCase()));
-        return sortAndFilterIssues(active, activeSort, activeStatusFilter, 'ReportedAt');
-    }, [issues, activeSort, activeStatusFilter]);
+        // 1. Filter by status (Active statuses: pending, assigned, in-progress)
+        let issuesByStatus = issues.filter((i) => ["pending", "assigned", "in-progress"].includes(i.Status.toLowerCase()));
+
+        // 🔑 NEW: 2. Filter by search query (Title or Description)
+        const lowerCaseQuery = searchQuery.toLowerCase();
+        if (lowerCaseQuery) {
+            issuesByStatus = issuesByStatus.filter(issue => 
+                issue.Title.toLowerCase().includes(lowerCaseQuery) ||
+                issue.Description.toLowerCase().includes(lowerCaseQuery)
+            );
+        }
+
+        // 3. Apply status filter and sorting (using the existing helper)
+        return sortAndFilterIssues(issuesByStatus, activeSort, activeStatusFilter, 'ReportedAt');
+    }, [issues, activeSort, activeStatusFilter, searchQuery]); // 🔑 ADDED: searchQuery dependency
 
 
     const historyIssues = useMemo(() => {
-        const history = issues.filter((i) => ["resolved", "cancelled"].includes(i.Status.toLowerCase()));
-        return sortAndFilterIssues(history, historySort, historyStatusFilter, 'UpdatedAt');
-    }, [issues, historySort, historyStatusFilter]);
+        // 1. Filter by status (History statuses: resolved, cancelled)
+        let issuesByStatus = issues.filter((i) => ["resolved", "cancelled"].includes(i.Status.toLowerCase()));
+        
+        // 🔑 NEW: 2. Filter by search query (Title or Description)
+        const lowerCaseQuery = searchQuery.toLowerCase();
+        if (lowerCaseQuery) {
+            issuesByStatus = issuesByStatus.filter(issue => 
+                issue.Title.toLowerCase().includes(lowerCaseQuery) ||
+                issue.Description.toLowerCase().includes(lowerCaseQuery)
+            );
+        }
+
+        // 3. Apply status filter and sorting
+        return sortAndFilterIssues(issuesByStatus, historySort, historyStatusFilter, 'UpdatedAt');
+    }, [issues, historySort, historyStatusFilter, searchQuery]); // 🔑 ADDED: searchQuery dependency
 
 
     const statusCounts = issues.reduce(
         (acc, issue) => {
             const status = (issue.Status || "").toLowerCase()
             if (status === "pending") acc.pending += 1
+            else if (status === "assigned") acc.assigned += 1 // 🔑 NEW STATUS COUNT
             else if (status === "in-progress") acc.inProgress += 1
             else if (status === "resolved") acc.resolved += 1
             else if (status === "cancelled") acc.cancelled += 1
             return acc
         },
-        { pending: 0, inProgress: 0, resolved: 0, cancelled: 0 }
+        // 🔑 UPDATED: Added assigned to initial state
+        { pending: 0, assigned: 0, inProgress: 0, resolved: 0, cancelled: 0 } 
     )
 
 
@@ -569,6 +863,13 @@ export default function MyIssuesDashboard() {
                     </Card>
                     <Card>
                         <CardContent className="p-4 flex flex-col items-center text-center">
+                            <Users className="h-5 w-5 text-teal-600 mb-2" />
+                            <p className="text-sm text-muted-foreground">Assigned</p>
+                            <p className="text-2xl font-bold text-teal-800">{statusCounts.assigned}</p>
+                        </CardContent>
+                    </Card>
+                    <Card>
+                        <CardContent className="p-4 flex flex-col items-center text-center">
                             <AlertTriangle className="h-5 w-5 text-blue-600 mb-2" />
                             <p className="text-sm text-muted-foreground">In Progress</p>
                             <p className="text-2xl font-bold text-blue-800">{statusCounts.inProgress}</p>
@@ -581,13 +882,6 @@ export default function MyIssuesDashboard() {
                             <p className="text-2xl font-bold text-green-800">{statusCounts.resolved}</p>
                         </CardContent>
                     </Card>
-                    <Card>
-                        <CardContent className="p-4 flex flex-col items-center text-center">
-                            <X className="h-5 w-5 text-red-600 mb-2" />
-                            <p className="text-sm text-muted-foreground">Cancelled</p>
-                            <p className="text-2xl font-bold text-red-800">{statusCounts.cancelled}</p>
-                        </CardContent>
-                    </Card>
                 </div>
 
                 {/* Active Issues Section */}
@@ -598,6 +892,18 @@ export default function MyIssuesDashboard() {
                             <CardTitle>Active Issues ({activeIssues.length})</CardTitle>
                         </div>
                         <div className="flex gap-2">
+                            {/* 🔑 NEW: Search Input for Active Issues */}
+                            <div className="relative w-48">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    type="text"
+                                    placeholder="Search title/desc..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
+                            {/* 🔑 END NEW SEARCH */}
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" size="sm" className="ml-2">
@@ -609,6 +915,7 @@ export default function MyIssuesDashboard() {
                                     <DropdownMenuLabel>Filter by Status</DropdownMenuLabel>
                                     <DropdownMenuSeparator />
                                     <DropdownMenuItem onClick={() => { setActiveStatusFilter("pending"); }}>Pending</DropdownMenuItem>
+                                    <DropdownMenuItem onClick={() => { setActiveStatusFilter("assigned"); }}>Assigned</DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => { setActiveStatusFilter("in-progress"); }}>In Progress</DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => { setActiveStatusFilter(null); }}>Show All</DropdownMenuItem>
                                 </DropdownMenuContent>
@@ -633,7 +940,7 @@ export default function MyIssuesDashboard() {
                         {activeIssues.length === 0 ? (
                             <div className="text-center py-8 text-muted-foreground">
                                 <ClipboardList className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                                <p>No active issues matching the current filter.</p>
+                                <p>No active issues matching the current filters.</p>
                             </div>
                         ) : (
                             <div className="space-y-4 max-h-[400px] overflow-y-auto">
@@ -654,8 +961,35 @@ export default function MyIssuesDashboard() {
 
                                         <h3 className="text-lg font-bold text-foreground">{issue.Title}</h3>
                                         <p className="text-sm text-muted-foreground line-clamp-2">{issue.Description}</p>
+                                        
+                                        {/* 🔑 ADDED: Thumbnail display in the active issue card */}
+                                        {issue.ImageUrl && (
+                                            <div className="w-16 h-12 overflow-hidden rounded-md border float-right ml-4">
+                                                <img 
+                                                    src={issue.ImageUrl} 
+                                                    alt="Issue Thumbnail" 
+                                                    className="object-cover w-full h-full"
+                                                />
+                                            </div>
+                                        )}
+                                        {/* 🔑 END ADDED */}
 
-                                        <div className="grid grid-cols-2 gap-4 border-t pt-3">
+                                        {/* 🔑 NEW: Staff Info Block for Assigned/In-Progress */}
+                                        {(issue.Status.toLowerCase() === "assigned" || issue.Status.toLowerCase() === "in-progress") && (
+                                            <div className="space-y-1 border-t pt-3 mt-3">
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <span className="font-bold text-gray-700">Staff name:</span>
+                                                    <span className="text-muted-foreground">{issue.DriverName} {issue.DriverSurname}</span>
+                                                </div>
+                                                <div className="flex items-center gap-2 text-sm">
+                                                    <span className="font-bold text-gray-700">Staff contact:</span>
+                                                    <span className="text-muted-foreground">{issue.DriverPhone}</span>
+                                                </div>
+                                            </div>
+                                        )}
+                                        
+                                        {/* Original info grid - only show border/padding if staff info was NOT shown */}
+                                        <div className={`grid grid-cols-2 gap-4 ${!(issue.Status.toLowerCase() === "assigned" || issue.Status.toLowerCase() === "in-progress") ? "border-t pt-3" : ""}`}>
                                             <div className="flex items-center gap-2 text-sm">
                                                 <MapPin className="h-4 w-4 text-blue-500" />
                                                 <span className="font-medium">Location:</span>
@@ -674,13 +1008,16 @@ export default function MyIssuesDashboard() {
                                         </div>
 
                                         <div className="flex gap-2 pt-3">
-                                            {/* Only Pending issues can be updated/cancelled */}
-                                            {issue.Status.toLowerCase() === "pending" && (
+                                            {/* 🔑 UPDATED: Allow CANCEL for Pending OR Assigned. Only allow EDIT if Pending. */}
+                                            {(issue.Status.toLowerCase() === "pending" || issue.Status.toLowerCase() === "assigned") && (
                                                 <>
-                                                    <Button variant="outline" size="sm" onClick={() => handleEditIssue(issue)}>
-                                                        Edit Issue
-                                                    </Button>
-                                                    <Button variant="destructive" size="sm" onClick={() => handleCancelIssue(issue.Id)}>
+                                                    {issue.Status.toLowerCase() === "pending" && ( // Only show edit button for Pending
+                                                        <Button variant="outline" size="sm" onClick={() => handleEditIssue(issue)}>
+                                                            Edit Issue
+                                                        </Button>
+                                                    )}
+                                                    {/* 🔑 UPDATED: Use the new handler to open the dialog */}
+                                                    <Button variant="destructive" size="sm" onClick={() => handleConfirmCancel(issue)}>
                                                         Cancel Issue
                                                     </Button>
                                                 </>
@@ -703,6 +1040,18 @@ export default function MyIssuesDashboard() {
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>Issue History ({historyIssues.length})</CardTitle>
                         <div className="flex gap-2">
+                             {/* 🔑 NEW: Search Input for History Issues */}
+                             <div className="relative w-48">
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                <Input
+                                    type="text"
+                                    placeholder="Search title/desc..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                    className="pl-9 h-9"
+                                />
+                            </div>
+                            {/* 🔑 END NEW SEARCH */}
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button variant="outline" size="sm">
@@ -737,12 +1086,13 @@ export default function MyIssuesDashboard() {
                     <CardContent>
                         {historyIssues.length === 0 ? (
                             <div className="text-center py-4 text-muted-foreground">
-                                <p>No completed or cancelled issues yet.</p>
+                                <p>No completed or cancelled issues matching the current filters.</p>
                             </div>
                         ) : (
                             <div className={`space-y-3 max-h-[400px] overflow-y-auto`}>
                                 {historyIssues.map((issue) => (
-                                    <div key={issue.Id} className="flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-lg bg-secondary/10">
+                                    // 🆕 Added 'group' class for the arrow indicator animation
+                                    <div key={issue.Id} className="group flex flex-col sm:flex-row items-start sm:items-center justify-between p-3 border rounded-lg bg-secondary/10">
                                     <div className="space-y-1">
                                         <div className="flex items-center gap-2">
                                             <Badge className={getStatusColor(issue.Status)} variant="outline">
@@ -757,26 +1107,55 @@ export default function MyIssuesDashboard() {
                                             <span className="font-mono">ID: {issue.Id.slice(0, 8)}</span> | Category: {issue.Category} | Location: {issue.Location}
                                         </p>
                                 
-                                        {/* 🆕 Rating Stars */}
+                                        {/* Rating Stars & Arrow Indicator */}
                                         {issue.Status.toLowerCase() === "resolved" && (
                                             <div className="flex items-center gap-1 mt-1">
                                                 {Array.from({ length: 5 }, (_, i) => i + 1).map((star) => (
                                                     <button
                                                         key={star}
-                                                        onClick={() => !issue.Rating && submitRating(issue.Id, star)}
-                                                        className={`text-xl ${star <= (issue.Rating || 0) ? "text-yellow-400" : "text-gray-300"} ${!issue.Rating ? "hover:text-yellow-500" : ""}`}
-                                                        disabled={!!issue.Rating}
+                                                        // 🔑 FIX: Set onClick to a function that does nothing when it's unrated,
+                                                        // forcing the user to use the "RATE NOW" button/modal.
+                                                        // Also ensures rated issues remain unclickable.
+                                                        onClick={() => {}} 
+                                                        className={`text-xl ${star <= (issue.Rating || 0) ? "text-yellow-400" : "text-gray-300"} cursor-default`}
+                                                        disabled={true} // 🔑 FIX: Disable all star buttons here
+                                                        aria-label={`Star ${star}`}
                                                     >
                                                         ★
                                                     </button>
                                                 ))}
                                                 {issue.Rating && <span className="ml-2 text-sm text-muted-foreground">{issue.Rating} / 5</span>}
+                                                
+                                                {/* 🆕 Moving Arrow Indicator for unresolved ratings */}
+                                                {issue.Rating === null && (
+                                                    <div className="flex items-center ml-3 px-2 py-1 rounded-full bg-yellow-100 border border-yellow-200 group-hover:bg-yellow-200 transition-colors cursor-pointer"
+                                                        onClick={(e) => {
+                                                            e.stopPropagation(); // Prevent potential parent clicks
+                                                            setIssueToRate(issue); // Open the rating modal
+                                                        }}
+                                                    >
+                                                        <span className="text-xs font-semibold text-yellow-800 mr-1 whitespace-nowrap">RATE NOW</span>
+                                                        <ArrowRight className="h-4 w-4 text-yellow-700 animate-pulse transition-transform transform group-hover:translate-x-1" />
+                                                    </div>
+                                                )}
                                             </div>
                                         )}
                                     </div>
-                                    <span className="text-xs text-muted-foreground mt-2 sm:mt-0 whitespace-nowrap">
-                                        Updated: {formatDateTime(issue.UpdatedAt)}
-                                    </span>
+                                   {/* Updated date and button container */}
+  <div className="mt-2 sm:mt-0 flex flex-col sm:items-end gap-2 w-full sm:w-auto">
+    <span className="text-xs text-muted-foreground whitespace-nowrap">
+      Updated: {formatDateTime(issue.UpdatedAt)}
+    </span>
+    <Button
+      variant="outline"
+      size="sm"
+      onClick={() => router.push(`/student/issues/${issue.Id}`)}
+      className="flex-shrink-0"
+    >
+      View Details
+    </Button>
+  </div>
+                                    
                                 </div>
                                 
                                 ))}
@@ -794,6 +1173,51 @@ export default function MyIssuesDashboard() {
                     onSave={handleSaveEdit}
                 />
             )}
+            
+            {/* 🆕 Rating Prompt Modal */}
+            {issueToRate && (
+                <RatingPromptModal
+                    issue={issueToRate}
+                    onClose={() => setIssueToRate(null)} // User chooses to rate later
+                    onSubmitRating={submitRating} // Re-use existing submit logic
+                />
+            )}
+            
+            {/* 🔑 NEW: Cancellation Confirmation Dialog */}
+            <Dialog open={issueToCancel !== null} onOpenChange={() => setIssueToCancel(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle className="text-xl font-bold flex items-center gap-2 text-red-600">
+                            <AlertTriangle className="h-5 w-5" />
+                            Confirm Issue Cancellation
+                        </DialogTitle>
+                        <DialogDescription className="text-base pt-2">
+                            Are you sure you want to **cancel** issue <strong className="font-mono">{issueToCancel?.Id.slice(0, 8)}</strong> ({issueToCancel?.Title})?
+                            <p className="mt-2">This action will update its status to **Cancelled**.</p>
+                            <p className="mt-2 text-sm text-muted-foreground">Current Status: **{issueToCancel?.Status}**</p>
+                        </DialogDescription>
+                    </DialogHeader>
+
+                    <DialogFooter className="mt-4">
+                        <Button 
+                            variant="outline" 
+                            onClick={() => setIssueToCancel(null)}
+                        >
+                            Nevermind (Keep Issue)
+                        </Button>
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                if (issueToCancel) {
+                                    handleCancelIssue(issueToCancel.Id);
+                                }
+                            }}
+                        >
+                            Yes, Cancel Issue
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     )
 }

@@ -152,7 +152,7 @@ public async Task<IActionResult> UpdateProfile([FromBody] UserDto userProfileUpd
         if (updateData.Count > 0)
             await userDoc.Reference.UpdateAsync(updateData);
 
-        // --- NEW: Update all issues where DriverEmail == oldEmail ---
+        // --- Update all issues where DriverEmail == oldEmail ---
         var issuesQuery = _firestoreDb.Collection("issues").WhereEqualTo("DriverEmail", oldEmail);
         var issuesSnapshot = await issuesQuery.GetSnapshotAsync();
 
@@ -170,6 +170,21 @@ public async Task<IActionResult> UpdateProfile([FromBody] UserDto userProfileUpd
             await issueDoc.Reference.UpdateAsync(issueUpdate);
         }
 
+        // --- NEW: Update all issues where ReporterEmail == oldEmail ---
+        var reporterIssuesQuery = _firestoreDb.Collection("issues").WhereEqualTo("ReporterEmail", oldEmail);
+        var reporterIssuesSnapshot = await reporterIssuesQuery.GetSnapshotAsync();
+
+        foreach (var issueDoc in reporterIssuesSnapshot.Documents)
+        {
+            var issueUpdate = new Dictionary<string, object>
+            {
+                ["ReporterEmail"] = newEmail,
+                ["ReporterName"] = userProfileUpdate.Name ?? userDoc.GetValue<string>("Name")
+            };
+
+            await issueDoc.Reference.UpdateAsync(issueUpdate);
+        }
+
         return Ok(new { message = "Profile updated successfully. All assigned issues have been updated accordingly." });
     }
     catch (FirebaseAuthException ex)
@@ -179,6 +194,79 @@ public async Task<IActionResult> UpdateProfile([FromBody] UserDto userProfileUpd
     catch (Exception ex)
     {
         return StatusCode(500, new { error = "Internal server error: " + ex.Message });
+    }
+}
+
+[HttpPost("forgot-password")]
+public async Task<IActionResult> ForgotPassword([FromBody] UserDto userEmailDto)
+{
+    if (userEmailDto == null || string.IsNullOrEmpty(userEmailDto.Email))
+        return BadRequest(new { error = "Email is required." });
+
+    try
+    {
+        // 1️⃣ Check if user exists in Firestore
+        var usersCollection = _firestoreDb.Collection("users");
+        var querySnapshot = await usersCollection.WhereEqualTo("Email", userEmailDto.Email).GetSnapshotAsync();
+
+        if (querySnapshot.Count == 0)
+        {
+            // ✅ User not found, return simple message
+            return NotFound(new { message = "User not found." });
+        }
+
+        var userDoc = querySnapshot.Documents[0];
+        string userName = userDoc.GetValue<string>("Name");
+
+        // 2️⃣ Generate temporary password
+        string tempPassword = GenerateRandomPassword(12);
+
+        // 3️⃣ Update Firebase Auth password
+        var firebaseUser = await FirebaseAuth.DefaultInstance.GetUserByEmailAsync(userEmailDto.Email);
+        await FirebaseAuth.DefaultInstance.UpdateUserAsync(new FirebaseAdmin.Auth.UserRecordArgs
+        {
+            Uid = firebaseUser.Uid,
+            Password = tempPassword
+        });
+
+        // 4️⃣ Send email with temporary password
+        using (var client = new SmtpClient("smtp.gmail.com", 587))
+        {
+            client.Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos");
+            client.EnableSsl = true;
+
+            var mailMessage = new MailMessage
+            {
+                From = new MailAddress("muhleusurp@gmail.com", "ResHelp"),
+                Subject = "Password Reset Request",
+                Body = $@"
+                    Hello {userName},<br/><br/>
+                    A password reset was requested for your ResHelp account.<br/>
+                    Your new temporary password is:<br/>
+                    <strong>{tempPassword}</strong><br/><br/>
+                    Please log in and change your password immediately.<br/><br/>
+                    Regards,<br/>ResHelp Team
+                ",
+                IsBodyHtml = true
+            };
+            mailMessage.To.Add(userEmailDto.Email);
+            await client.SendMailAsync(mailMessage);
+        }
+
+        // 5️⃣ Return success response
+        return Ok(new { message = "Temporary password has been sent to your email." });
+    }
+    catch (FirebaseAuthException fex) when (fex.AuthErrorCode == AuthErrorCode.UserNotFound)
+    {
+        return NotFound(new { message = "User not found." });
+    }
+    catch (SmtpException smtpEx)
+    {
+        return StatusCode(500, new { error = $"Email sending failed: {smtpEx.Message}" });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { error = $"Internal server error: {ex.Message}" });
     }
 }
 
