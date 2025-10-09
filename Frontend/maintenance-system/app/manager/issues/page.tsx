@@ -50,7 +50,7 @@ type Issue = {
   priority: string;
   location: string;
   isUrgent: boolean;
-  status: "Pending" | "Assigned" | "Resolved" | "Cancelled";
+  status: "Pending" | "Assigned" | "Resolved" | "Cancelled" | "In Progress";
   ReportedAt: string; // currently, we use this, but Firestore has ReportedAt
   reporterEmail: string;
   reporterName: string;
@@ -310,6 +310,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
       case "assigned": return "bg-blue-100 text-blue-800 border-blue-200";
       case "resolved": return "bg-green-100 text-green-800 border-green-200";
       case "cancelled": return "bg-red-100 text-red-800 border-red-200";
+      case "inprogress": return "bg-purple-100 text-purple-800 border-purple-200";
       default: return "bg-gray-100 text-gray-800 border-gray-200";
     }
   };
@@ -377,10 +378,10 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
       return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
 
     } else {
-      const statusOrder = ["pending", "assigned", "resolved", "cancelled"];
+      const statusOrder = ["pending", "assigned", "inprogress", "resolved", "cancelled"];
       
-      const statusA = statusOrder.indexOf((a.status || "").toLowerCase().replace("_", " "));
-      const statusB = statusOrder.indexOf((b.status || "").toLowerCase().replace("_", " "));
+      const statusA = statusOrder.indexOf((a.status || "").toLowerCase().replace(/[\s_]/g, ""));
+      const statusB = statusOrder.indexOf((b.status || "").toLowerCase().replace(/[\s_]/g, ""));
 
       return sortDirection === 'asc' ? statusA - statusB : statusB - statusA;
     }}
@@ -395,7 +396,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-primary">Manage Issues</h1>
-            <p className="text-muted-foreground">Add, edit, and manage Issues (Local Mock Data)</p>
+            <p className="text-muted-foreground">Add, edit, and manage Issues</p>
           </div>
 
           {/* Add Request Dialog */}
@@ -499,6 +500,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
               <SelectItem value="All">All Statuses</SelectItem>
               <SelectItem value="Pending">Pending</SelectItem>
               <SelectItem value="Assigned">Assigned</SelectItem>
+              <SelectItem value="In Progress">In Progress</SelectItem>
               <SelectItem value="Resolved">Resolved</SelectItem>
               <SelectItem value="Cancelled">Cancelled</SelectItem>
             </SelectContent>
