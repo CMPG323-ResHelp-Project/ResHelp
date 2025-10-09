@@ -22,7 +22,7 @@ namespace ResHelp.Models
         public string Status { get; set; } = string.Empty; 
         public string Surname { get; set; } = string.Empty; 
         public string Id { get; set; } = string.Empty; 
-        public string CreatedAt { get; set; } = string.Empty; 
+        public string ReportedAt { get; set; } = string.Empty; 
         public string ReporterName {get; set; } = string.Empty;
     }
 }

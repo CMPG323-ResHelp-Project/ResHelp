@@ -59,7 +59,7 @@ export function StaffProfile() {
   // State for the post-API-call verification message (6-second delay before logout)
   const [isVerificationStep, setIsVerificationStep] = useState(false)
   const [showEmailConfirmDialog, setShowEmailConfirmDialog] = useState(false);
-  
+
   // Ref for the 6-second delay timer
   const apiDelayRef = useRef<NodeJS.Timeout | null>(null)
 
@@ -70,12 +70,12 @@ export function StaffProfile() {
       return () => clearTimeout(timer); // cleanup if component unmounts
     }
   }, [message]);
-  
+
   // Cleanup for the delay timer
   useEffect(() => {
-      return () => {
-        if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
-      };
+    return () => {
+      if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
+    };
   }, []);
 
 
@@ -106,7 +106,7 @@ export function StaffProfile() {
         setEmail(data.email)
         setPhone(data.phone)
         setAddress(data.address || "")
-        setMaintenanceType(data.maintenanceType || "")  // ✅ set state from fetched profile
+        setMaintenanceType(data.maintenanceType || "")
       } catch (err: any) {
         setError(err.message || "Error fetching profile.")
       } finally {
@@ -150,10 +150,31 @@ export function StaffProfile() {
           setIsLoading(false)
           return
         }
-        const credential = EmailAuthProvider.credential(user.email!, currentPassword)
-        await reauthenticateWithCredential(user, credential)
 
-        if (newPassword !== confirmNewPassword) throw new Error("New passwords do not match.")
+        // --- START OF FIX: Firebase Reauthentication Error Handling ---
+        try {
+          // Attempt reauthentication
+          const credential = EmailAuthProvider.credential(user.email!, currentPassword)
+          await reauthenticateWithCredential(user, credential)
+        } catch (authError: any) {
+          // Handle Firebase reauthentication error (auth/invalid-credential/wrong-password)
+          if (authError.code === 'auth/invalid-credential' || authError.code === 'auth/wrong-password') {
+            setPasswordError("Incorrect current password. Please try again.");
+          } else {
+            // For all other Firebase Auth errors during reauthentication
+            setPasswordError("Authentication failed: " + authError.message);
+          }
+          setIsLoading(false);
+          return; // Stop the profile update process
+        }
+        // --- END OF FIX ---
+
+        // Continue if reauthentication succeeded
+        if (newPassword !== confirmNewPassword) {
+          setPasswordError("New passwords do not match.")
+          setIsLoading(false)
+          return
+        }
         await updatePassword(user, newPassword)
         setMessage("Password updated successfully!")
         setCurrentPassword("")
@@ -161,10 +182,10 @@ export function StaffProfile() {
         setConfirmNewPassword("")
       }
 
-      // ✅ Handle email change with dialog (no window.confirm)
+      // Handle email change with dialog
       if (isEmailChangeAllowed && email !== profile?.email) {
         setShowEmailConfirmDialog(true) // Open dialog instead of confirm
-        setIsLoading(false)
+        setIsLoading(false) // Unset loading temporarily while dialog is open
         return
       }
 
@@ -180,23 +201,55 @@ export function StaffProfile() {
         throw new Error(errData.error || "Failed to update profile.")
       }
 
+      // Update local profile state
+      setProfile(prev => prev ? { ...prev, name, surname, phone, address, maintenanceType } : prev)
+
       setMessage("Profile updated successfully!")
       setIsEditing(false)
     } catch (err: any) {
       setError(err.message)
     } finally {
-      setIsLoading(false)
+      // Only set isLoading to false if not opening the email confirmation dialog
+      if (!showEmailConfirmDialog) {
+        setIsLoading(false)
+      }
     }
   }
+
+  const handleToggleEdit = () => {
+    if (isEditing) {
+      // Cancel edit: revert states
+      setName(profile?.name || "")
+      setSurname(profile?.surname || "")
+      setEmail(profile?.email || "")
+      setPhone(profile?.phone || "")
+      setAddress(profile?.address || "")
+      setMaintenanceType(profile?.maintenanceType || "")
+      setShowPasswordChange(false)
+      setIsEmailChangeAllowed(false)
+      setPasswordError("")
+    }
+    // Toggle the state
+    setIsEditing(!isEditing);
+    setError(null);
+    setMessage(null);
+  }
+
 
   if (isLoading && !profile) return <div className="p-4 text-center">Loading profile...</div>
   if (error) return <div className="p-4 text-center text-red-500">{error}</div>
   if (!profile) return <div className="p-4 text-center">No profile data found.</div>
 
+  // Fields are disabled if not editing OR email flow is active OR general saving is in progress
+  const isFieldDisabled = !isEditing || isEmailUpdatePending || isVerificationStep || isLoading;
+  // The whole form (opacity/pointer-events) is disabled only during the email update flow
+  const isEmailFlowActive = isEmailUpdatePending || isVerificationStep;
+
+
   return (
     <div className="relative">
       {/* Overlay stays active and disables all interaction during email update process */}
-      {(isEmailUpdatePending || isVerificationStep) && (
+      {isEmailFlowActive && (
         <div className="fixed inset-0 z-40 bg-white/70" />
       )}
 
@@ -209,7 +262,7 @@ export function StaffProfile() {
           <CardContent>
             <form onSubmit={handleUpdateProfile} className="space-y-4">
               {/* Disable form elements if email update is pending or verification is needed */}
-              <div className={`${(isEmailUpdatePending || isVerificationStep) ? "pointer-events-none opacity-60" : "pointer-events-auto"}`}>
+              <div className={`${isEmailFlowActive ? "pointer-events-none opacity-60" : "pointer-events-auto"}`}>
 
                 {/* ERROR ALERT (for general errors) */}
                 {error && (
@@ -249,7 +302,7 @@ export function StaffProfile() {
                         value={name}
                         onChange={(e) => setName(e.target.value)}
                         required
-                        disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                        disabled={isFieldDisabled}
                         className="border-2 border-gray-400 focus:border-blue-500"
                       />
                     </div>
@@ -261,7 +314,7 @@ export function StaffProfile() {
                         value={surname}
                         onChange={(e) => setSurname(e.target.value)}
                         required
-                        disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                        disabled={isFieldDisabled}
                         className="border-2 border-gray-400 focus:border-blue-500"
                       />
                     </div>
@@ -272,7 +325,7 @@ export function StaffProfile() {
                           id="allow-email-change"
                           checked={isEmailChangeAllowed}
                           onCheckedChange={() => setIsEmailChangeAllowed(!isEmailChangeAllowed)}
-                          disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                          disabled={isEmailFlowActive || !isEditing}
                           className="border-gray-400 data-[state=checked]:bg-blue-500"
                         />
                       </div>
@@ -282,7 +335,7 @@ export function StaffProfile() {
                         value={email}
                         onChange={(e) => setEmail(e.target.value)}
                         required
-                        disabled={!isEditing || !isEmailChangeAllowed || isEmailUpdatePending || isVerificationStep}
+                        disabled={!isEditing || !isEmailChangeAllowed || isEmailFlowActive || isLoading}
                         className="border-2 border-gray-400 focus:border-blue-500"
                       />
                     </div>
@@ -294,7 +347,7 @@ export function StaffProfile() {
                         value={phone}
                         onChange={(e) => setPhone(e.target.value)}
                         required
-                        disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                        disabled={isFieldDisabled}
                         className="border-2 border-gray-400 focus:border-blue-500"
                       />
                     </div>
@@ -311,7 +364,7 @@ export function StaffProfile() {
                           value={address}
                           onChange={(e) => setAddress(e.target.value)}
                           required
-                          disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                          disabled={isFieldDisabled}
                           className="border-2 border-gray-400 focus:border-blue-500"
                         />
                       </div>
@@ -322,7 +375,7 @@ export function StaffProfile() {
                         <Select
                           value={maintenanceType}
                           onValueChange={(value) => setMaintenanceType(value)}
-                          disabled={!isEditing || isEmailUpdatePending || isVerificationStep}
+                          disabled={isFieldDisabled}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select a service" />
@@ -356,7 +409,7 @@ export function StaffProfile() {
                         id="show-password-change"
                         checked={showPasswordChange}
                         onCheckedChange={() => setShowPasswordChange(!showPasswordChange)}
-                        disabled={isEmailUpdatePending || isVerificationStep}
+                        disabled={isEmailFlowActive || isLoading}
                         className="border-gray-400 data-[state=checked]:bg-blue-500"
                       />
                       <Label htmlFor="show-password-change">Change Password?</Label>
@@ -376,7 +429,7 @@ export function StaffProfile() {
                               value={currentPassword}
                               onChange={(e) => setCurrentPassword(e.target.value)}
                               required
-                              disabled={isEmailUpdatePending || isVerificationStep}
+                              disabled={isEmailFlowActive || isLoading}
                               className="border-2 border-gray-400 focus:border-blue-500"
                             />
                           </div>
@@ -388,7 +441,7 @@ export function StaffProfile() {
                               value={newPassword}
                               onChange={(e) => setNewPassword(e.target.value)}
                               required
-                              disabled={isEmailUpdatePending || isVerificationStep}
+                              disabled={isEmailFlowActive || isLoading}
                               className="border-2 border-gray-400 focus:border-blue-500"
                             />
                           </div>
@@ -400,7 +453,7 @@ export function StaffProfile() {
                               value={confirmNewPassword}
                               onChange={(e) => setConfirmNewPassword(e.target.value)}
                               required
-                              disabled={isEmailUpdatePending || isVerificationStep}
+                              disabled={isEmailFlowActive || isLoading}
                               className="border-2 border-gray-400 focus:border-blue-500"
                             />
                           </div>
@@ -412,14 +465,26 @@ export function StaffProfile() {
 
                 {/* Action Buttons */}
                 <div className="flex justify-end space-x-2">
-                  {!isEmailUpdatePending && !isVerificationStep && (
-                    <Button type="button" variant="outline" onClick={() => { setIsEditing(!isEditing); setError(null); setMessage(null); }}>
+                  {/* The Cancel/Edit button is only disabled if the Email flow is active */}
+                  {!isEmailFlowActive && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleToggleEdit}
+                      disabled={isLoading} // Disable while saving
+                    >
                       {isEditing ? "Cancel" : "Edit Profile"}
                     </Button>
                   )}
-                  {isEditing && !isEmailUpdatePending && !isVerificationStep && (
+                  {isEditing && !isEmailFlowActive && (
                     <Button type="submit" disabled={isLoading}>
-                      {isLoading ? "Saving..." : "Save Changes"}
+                      {isLoading ? (
+                        <>
+                          <LoadingSpinner /> Saving...
+                        </>
+                      ) : (
+                        "Save Changes"
+                      )}
                     </Button>
                   )}
                 </div>
@@ -427,9 +492,9 @@ export function StaffProfile() {
             </form>
           </CardContent>
         </Card>
-        
+
         {/* Email Update Progress Message - Displayed on top of the form when pending/verifying */}
-        {(isEmailUpdatePending || isVerificationStep) && (
+        {isEmailFlowActive && (
           <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
             <Card className="p-6 text-center border-blue-400 shadow-xl max-w-sm w-full pointer-events-auto">
               {isEmailUpdatePending && (
@@ -481,10 +546,10 @@ export function StaffProfile() {
                 setMessage(null)
                 setIsLoading(true)
                 setShowEmailConfirmDialog(false); // Close dialog
-                
+
                 // **STEP 1: Initiate Email Update Pending State (Loading/Delay)**
                 setIsEmailUpdatePending(true);
-                
+
                 try {
                   const res = await fetch("http://localhost:5229/Profile/update", {
                     method: "POST",
@@ -501,7 +566,7 @@ export function StaffProfile() {
                     // **Failure Handler**
                     if (apiDelayRef.current) clearTimeout(apiDelayRef.current);
                     setIsEmailUpdatePending(false); // Stop pending state
-                    
+
                     if (data?.error?.includes("EMAIL_EXISTS")) {
                       setMessage("Unsuccessful: This email already exists.")
                     } else {
@@ -510,20 +575,20 @@ export function StaffProfile() {
                   } else {
                     // **Success Handler**
                     setIsEditing(false)
-                    
+
                     // Set the 6-second delay before showing the verification message/logging out
                     apiDelayRef.current = setTimeout(() => {
-                        setIsEmailUpdatePending(false); // Remove loading screen
-                        setIsVerificationStep(true); // Show verification message
-                        
-                        // Log out after a short pause (e.g., 3 seconds) for the user to read the message
-                        setTimeout(() => {
-                            signOut(auth).then(() => {
-                                window.location.href = "/"
-                            })
-                        }, 3000); 
-                        
-                    }, 6000); // **6-second delay as requested**
+                      setIsEmailUpdatePending(false); // Remove loading screen
+                      setIsVerificationStep(true); // Show verification message
+
+                      // Log out after a short pause (e.g., 3 seconds) for the user to read the message
+                      setTimeout(() => {
+                        signOut(auth).then(() => {
+                          window.location.href = "/"
+                        })
+                      }, 3000);
+
+                    }, 6000);
                   }
                 } catch (err: any) {
                   // **Error Handler**
@@ -536,7 +601,7 @@ export function StaffProfile() {
               }}
               disabled={isLoading}
             >
-              {isLoading ? "Updating..." : "Confirm"}
+              {isLoading ? <><LoadingSpinner /> Updating...</> : "Confirm"}
             </Button>
           </div>
         </DialogContent>

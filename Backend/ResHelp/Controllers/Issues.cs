@@ -21,13 +21,11 @@ namespace ResHelp.Controllers
             _firestoreDb = firestoreDb;
         }
 
-
-
         [HttpPut("{id}/status")]
         public async Task<IActionResult> UpdateIssueStatus(
-                string id,
-                [FromBody] StatusUpdateDto statusUpdate,
-                [FromHeader(Name = "Authorization")] string authorization)
+         string id,
+         [FromBody] StatusUpdateDto statusUpdate,
+         [FromHeader(Name = "Authorization")] string authorization)
         {
             if (string.IsNullOrEmpty(authorization))
                 return Unauthorized(new { error = "Authorization header is missing." });
@@ -46,10 +44,10 @@ namespace ResHelp.Controllers
 
                 var existingIssue = snapshot.ToDictionary();
                 var updates = new Dictionary<string, object>
-                {
-                    { "Status", statusUpdate.NewStatus },
-                    { "UpdatedAt", DateTime.UtcNow }
-                };
+        {
+            { "Status", statusUpdate.NewStatus },
+            { "UpdatedAt", DateTime.UtcNow }
+        };
 
                 string existingStatus = existingIssue.ContainsKey("Status") ? existingIssue["Status"]?.ToString() : "";
 
@@ -61,6 +59,7 @@ namespace ResHelp.Controllers
                 if (statusUpdate.NewStatus.ToLower() == "resolved")
                 {
                     updates.Add("ResolvedBy", userEmail);
+                    updates.Add("ResolvedAt", DateTime.UtcNow); 
                 }
 
                 await docRef.UpdateAsync(updates);
@@ -162,8 +161,47 @@ public async Task<IActionResult> ReportIssue(
     }
 }
 
+        [HttpGet("get")]
+        public async Task<IActionResult> GetAllIssues()
+        {
+            try
+            {
+                var issuesSnapshot = await _firestoreDb.Collection("issues").GetSnapshotAsync();
+                var issuesList = new List<RequestDto>();
 
-      [HttpGet("all")]
+                foreach (var doc in issuesSnapshot.Documents)
+                {
+                    var data = doc.ToDictionary();
+                    issuesList.Add(new RequestDto
+                    {
+                        Id = data.ContainsKey("Id") ? data["Id"].ToString() : doc.Id,
+                        Title = data.ContainsKey("Title") ? data["Title"].ToString() : string.Empty,
+                        Description = data.ContainsKey("Description") ? data["Description"].ToString() : string.Empty,
+                        Category = data.ContainsKey("Category") ? data["Category"].ToString() : string.Empty,
+                        Priority = data.ContainsKey("Priority") ? data["Priority"].ToString() : string.Empty,
+                        Location = data.ContainsKey("Location") ? data["Location"].ToString() : string.Empty,
+                        IsUrgent = data.ContainsKey("IsUrgent") && Convert.ToBoolean(data["IsUrgent"]),
+                        Status = data.ContainsKey("Status") ? data["Status"].ToString() : "Pending",
+
+                        ReportedAt = data.ContainsKey("ReportedAt") && data["ReportedAt"] is Google.Cloud.Firestore.Timestamp ts
+                            ? ts.ToDateTime().ToString("o")
+                            : string.Empty, 
+
+                        ReporterEmail = data.ContainsKey("ReporterEmail") ? data["ReporterEmail"].ToString() : string.Empty,
+                        ReporterName = data.ContainsKey("ReporterName") ? data["ReporterName"].ToString() : string.Empty,
+                    });
+                }
+
+                return Ok(issuesList);
+            }
+            catch (Exception ex)
+            {
+                return StatusCode(500, new { error = "Internal server error: " + ex.Message });
+            }
+        }
+
+
+        [HttpGet("all")]
         public async Task<IActionResult> GetAllIssues([FromHeader(Name = "Authorization")] string authorization)
         {
             if (string.IsNullOrEmpty(authorization))
@@ -288,67 +326,64 @@ public async Task<IActionResult> ReportIssue(
             }
         }
 
-        [HttpPost("{id}/rate")]
-        public async Task<IActionResult> RateIssue(
-            string id,
-            [FromBody] RatingDto ratingDto, // { int Rating }
-            [FromHeader(Name = "Authorization")] string authorization)
+       [HttpPost("{id}/rate")]
+public async Task<IActionResult> RateIssue(
+    string id,
+    [FromBody] RatingDto ratingDto, // { int Rating }
+    [FromHeader(Name = "Authorization")] string authorization)
+{
+    if (ratingDto == null || ratingDto.Rating < 1 || ratingDto.Rating > 5)
+        return BadRequest(new { error = "Rating must be between 1 and 5." });
+
+    if (string.IsNullOrEmpty(authorization))
+        return Unauthorized(new { error = "Authorization header is missing." });
+
+    try
+    {
+        var idToken = authorization.Replace("Bearer ", "").Trim();
+        var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
+        string email = decodedToken.Claims["email"]?.ToString() ?? "";
+
+        var docRef = _firestoreDb.Collection("issues").Document(id);
+        var snapshot = await docRef.GetSnapshotAsync();
+
+        if (!snapshot.Exists)
+            return NotFound(new { error = $"Issue with ID {id} not found." });
+
+        var existingIssue = snapshot.ToDictionary();
+        string reporterEmail = existingIssue.ContainsKey("ReporterEmail") ? existingIssue["ReporterEmail"]?.ToString() : null;
+        string status = existingIssue.ContainsKey("Status") ? existingIssue["Status"]?.ToString() : null;
+
+        // Check ownership by email
+        if (reporterEmail != email)
+            return Forbid();
+
+        // Only allow rating if status is Resolved (case-insensitive)
+        if ((status ?? "").ToLower() != "resolved")
+            return BadRequest(new { error = "Only resolved issues can be rated." });
+
+        // Update the rating
+        var updates = new Dictionary<string, object>
         {
-            if (ratingDto == null || ratingDto.Rating < 1 || ratingDto.Rating > 5)
-                return BadRequest(new { error = "Rating must be between 1 and 5." });
+            { "Rating", ratingDto.Rating },
+            { "UpdatedAt", DateTime.UtcNow }
+        };
 
-            if (string.IsNullOrEmpty(authorization))
-                return Unauthorized(new { error = "Authorization header is missing." });
+        await docRef.UpdateAsync(updates);
 
-            try
-            {
-                var idToken = authorization.Replace("Bearer ", "").Trim();
-                var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
-                string uid = decodedToken.Uid;
-                string email = decodedToken.Claims["email"]?.ToString() ?? "";
+        return Ok(new { message = "Issue rated successfully.", id = id, rating = ratingDto.Rating });
+    }
+    catch (FirebaseAuthException ex)
+    {
+        return Unauthorized(new { error = "Invalid token: " + ex.Message });
+    }
+    catch (Exception ex)
+    {
+        return StatusCode(500, new { error = ex.Message });
+    }
+}
 
-                var docRef = _firestoreDb.Collection("issues").Document(id);
-                var snapshot = await docRef.GetSnapshotAsync();
-
-                if (!snapshot.Exists)
-                    return NotFound(new { error = $"Issue with ID {id} not found." });
-
-                var existingIssue = snapshot.ToDictionary();
-                string reportedByUid = existingIssue.ContainsKey("ReportedBy") ? existingIssue["ReportedBy"]?.ToString() : null;
-                string status = existingIssue.ContainsKey("Status") ? existingIssue["Status"]?.ToString() : null;
-
-                // Check ownership
-                if (reportedByUid != uid)
-                    return Forbid();
-
-                // Only allow rating if status is Resolved
-              // Only allow rating if status is Resolved (case-insensitive)
-if ((status ?? "").ToLower() != "resolved")
-    return BadRequest(new { error = "Only resolved issues can be rated." });
-
-
-                // Update the rating
-                var updates = new Dictionary<string, object>
-                {
-                    { "Rating", ratingDto.Rating },
-                    { "UpdatedAt", DateTime.UtcNow }
-                };
-
-                await docRef.UpdateAsync(updates);
-
-                return Ok(new { message = "Issue rated successfully.", id = id, rating = ratingDto.Rating });
-            }
-            catch (FirebaseAuthException ex)
-            {
-                return Unauthorized(new { error = "Invalid token: " + ex.Message });
-            }
-            catch (Exception ex)
-            {
-                return StatusCode(500, new { error = ex.Message });
-            }
-        }
-
-        [HttpPut("{id}/cancel")]
+[HttpPut("{id}/cancel")]
 public async Task<IActionResult> CancelIssue(
     string id,
     [FromHeader(Name = "Authorization")] string authorization)
@@ -360,7 +395,6 @@ public async Task<IActionResult> CancelIssue(
     {
         var idToken = authorization.Replace("Bearer ", "").Trim();
         var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
-        string uid = decodedToken.Uid;
         string email = decodedToken.Claims["email"]?.ToString() ?? "";
 
         var docRef = _firestoreDb.Collection("issues").Document(id);
@@ -370,10 +404,10 @@ public async Task<IActionResult> CancelIssue(
             return NotFound(new { error = $"Issue with ID {id} not found." });
 
         var existingIssue = snapshot.ToDictionary();
-        string reportedByUid = existingIssue.ContainsKey("ReportedBy") ? existingIssue["ReportedBy"]?.ToString() : null;
+        string reporterEmail = existingIssue.ContainsKey("ReporterEmail") ? existingIssue["ReporterEmail"]?.ToString() : null;
 
-        // Check ownership
-        if (reportedByUid != uid)
+        // Check ownership by email
+        if (reporterEmail != email)
             return Forbid();
 
         // ✅ Update the status to Cancelled
@@ -394,7 +428,6 @@ public async Task<IActionResult> CancelIssue(
         return StatusCode(500, new { error = ex.Message });
     }
 }
-
 
     }
 }

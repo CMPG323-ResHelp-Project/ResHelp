@@ -4,6 +4,7 @@ import { useState, useEffect } from "react"
 import { LoginForm } from "@/components/login-form"
 import { RegisterForm } from "@/components/register-form"
 import { Button } from "@/components/ui/button"
+import { ForgotPasswordForm } from "@/components/forgot-password-form" 
 import Link from "next/link"
 
 const testimonials = [
@@ -30,7 +31,7 @@ const testimonials = [
 ]
 
 export default function LoginPage() {
-  const [view, setView] = useState<"login" | "register">("login")
+  const [view, setView] = useState<"login" | "register" | "forgotPassword">("login")
   const [currentTestimonialIndex, setCurrentTestimonialIndex] = useState(0)
 
   useEffect(() => {
@@ -80,10 +81,24 @@ export default function LoginPage() {
         <div className="flex items-center justify-center">
           <div className="w-full max-w-md mx-auto space-y-6">
             {view === "login" ? (
-              <LoginForm onViewChange={() => setView("register")} />
-            ) : (
+              <LoginForm
+                onViewChange={() => setView("register")}
+                onForgotPassword={() => setView("forgotPassword")}
+              />
+            ) : view === "register" ? (
               <>
                 <RegisterForm onViewChange={() => setView("login")} />
+                <Button
+                  onClick={() => setView("login")}
+                  variant="outline"
+                  className="w-full h-11 bg-transparent hover:bg-muted-foreground/5 transition-all"
+                >
+                  Back to Home
+                </Button>
+              </>
+            ) : (
+              <>
+                <ForgotPasswordForm onViewChange={() => setView("login")} />
                 <Button
                   onClick={() => setView("login")}
                   variant="outline"

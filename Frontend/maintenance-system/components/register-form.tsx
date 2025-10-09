@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 type RegisterFormProps = {
   onViewChange: () => void
@@ -26,9 +27,14 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
   const [address, setAddress] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isRegistered, setIsRegistered] = useState(false)
+  const [error, setError] = useState<string | null>(null) // 🔴 central error state
   const router = useRouter()
 
-  // New state variables for errors
+  const [residenceName, setResidenceName] = useState("")
+  const [residenceSection, setResidenceSection] = useState("")
+  const [residenceRoom, setResidenceRoom] = useState("")
+
+  // New state variables for field-level errors
   const [emailError, setEmailError] = useState("")
   const [passwordError, setPasswordError] = useState("")
   const [phoneError, setPhoneError] = useState("")
@@ -37,98 +43,102 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
   const [maintenanceError, setMaintenanceError] = useState("")
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    e.preventDefault()
 
     // Clear previous errors
-    setEmailError("");
-    setPasswordError("");
-    setPhoneError("");
-    setUserTypeError("");
-    setAddressError("");
-    setMaintenanceError("");
+    setError(null)
+    setEmailError("")
+    setPasswordError("")
+    setPhoneError("")
+    setUserTypeError("")
+    setAddressError("")
+    setMaintenanceError("")
 
-    // Start Validation
-    let hasError = false;
+    let hasError = false
 
     // Email Validation
     if (!email.endsWith("@gmail.com")) {
-      setEmailError("Please enter a valid email address ending with @gmail.com.");
-      hasError = true;
+      setError("Please enter a valid email address ending with @gmail.com.")
+      hasError = true
     }
 
     // Password Match
     if (password !== confirmPassword) {
-      setPasswordError("Passwords do not match.");
-      hasError = true;
+      setError("Passwords do not match.")
+      hasError = true
     }
 
     // Phone Number Validation
-    const cleanedPhone = phone.replace(/[^0-9+]/g, '');
-    const isTenDigits = /^\d{10}$/.test(cleanedPhone);
-    const isPlus27 = /^\+27\d{9}$/.test(cleanedPhone);
+    const cleanedPhone = phone.replace(/[^0-9+]/g, "")
+    const isTenDigits = /^\d{10}$/.test(cleanedPhone)
+    const isPlus27 = /^\+27\d{9}$/.test(cleanedPhone)
     if (!isTenDigits && !isPlus27) {
-      setPhoneError("Please enter a 10-digit number or one starting with +27 followed by 9 digits.");
-      hasError = true;
+      setError("Please enter a 10-digit number or one starting with +27 followed by 9 digits.")
+      hasError = true
     }
 
     // Role Selection Validation
     if (!userType) {
-      setUserTypeError("Please select your role.");
-      hasError = true;
+      setError("Please select your role.")
+      hasError = true
     }
 
-    // Address Validation (for students)
-    if (userType === "student" && !address) {
-      setAddressError("Please enter your residence address.");
-      hasError = true;
-    }
-
-    // Maintenance Type Validation (for staff)
-    if (userType === "staff" && !maintenanceType) {
-      setMaintenanceError("Please select your maintenance area.");
-      hasError = true;
+    // Address validation
+    if (userType === "student") {
+      const requiredFields = [residenceName, residenceSection, residenceRoom]
+      const allFilled = requiredFields.every(field => field.trim() !== "")
+      if (!allFilled) {
+        setError("All three Residence Address fields (Name, Section, Room) must be filled.")
+        return
+      }
     }
 
     if (hasError) {
-      return; // Stop form submission if there are validation errors
+      return
     }
 
-    // If no errors, proceed with registration
-    setIsLoading(true);
+    setIsLoading(true)
 
     try {
+      // Concatenate address if student
+      let addressToSend = ""
+      if (userType === "student") {
+        const roomValue = residenceRoom.trim()
+        const formattedRoom = roomValue.startsWith("Room ") ? roomValue : `Room ${roomValue}`
+        addressToSend = [residenceName.trim(), residenceSection.trim(), formattedRoom].join(", ")
+      }
+
       const response = await fetch("http://localhost:5229/Register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          name, surname, email, phone: cleanedPhone, password, userType, maintenanceType, address
+          name, surname, email, phone: cleanedPhone, password, userType, maintenanceType, address: addressToSend
         })
-      });
+      })
 
       if (!response.ok) {
-        let errorMessage = "Registration failed";
+        let errorMessage = "Registration failed"
         try {
-          const errorData = await response.json();
-          errorMessage = errorData.error || JSON.stringify(errorData);
+          const errorData = await response.json()
+          errorMessage = errorData.error || JSON.stringify(errorData)
         } catch (jsonErr) {
-          console.error("Error parsing backend response:", jsonErr);
+          console.error("Error parsing backend response:", jsonErr)
         }
-        throw new Error(errorMessage);
+        throw new Error(errorMessage)
       }
 
-      const data = await response.json();
-      console.log("Backend response:", data);
+      const data = await response.json()
+      console.log("Backend response:", data)
 
-      setIsRegistered(true);
-      setTimeout(() => onViewChange(), 2000);
-
+      setIsRegistered(true)
+      setTimeout(() => onViewChange(), 2000)
     } catch (err) {
-      console.error("Fetch error:", err);
-      alert(`Error: ${(err as Error).message}`);
+      console.error("Fetch error:", err)
+      setError((err as Error).message) // 🔴 show error inside form instead of alert
     } finally {
-      setIsLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
 
   if (isRegistered) {
     return (
@@ -150,6 +160,13 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
       <Card className="w-full">
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
+            {/* 🔴 Show backend error here */}
+            {error && (
+              <Alert className="border-red-200 bg-red-50 text-red-800">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {/* Left Column */}
               <div className="space-y-4">
@@ -203,17 +220,24 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
 
               {/* Right Column */}
               <div className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="password">Password</Label>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Create a password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                  />
-                </div>
+              <div className="space-y-2">
+  <Label htmlFor="password">Password</Label>
+  <Input
+    id="password"
+    type="password"
+    placeholder="Create a password"
+    value={password}
+    onChange={(e) => setPassword(e.target.value)}
+    required
+  />
+  {/* Styled password hint like success message */}
+  {password.length < 6 && (
+    <Alert className="border-green-200 bg-green-50 text-green-800 mt-2">
+      <AlertDescription>Password must be at least 6 characters long.</AlertDescription>
+    </Alert>
+  )}
+</div>
+
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">Confirm Password</Label>
                   <Input
@@ -241,17 +265,15 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
                 </div>
                 {userType === "student" && (
                   <div className="space-y-2">
-                    <Label htmlFor="address">Residence Address</Label>
-                    <Input
-                      id="address"
-                      type="text"
-                      placeholder="Enter your residence address"
-                      value={address}
-                      onChange={(e) => setAddress(e.target.value)}
-                      required
-                    />
-                    {addressError && <p className="text-red-500 text-sm mt-1">{addressError}</p>}
+                  <Label htmlFor="residenceName">Residence Address</Label>
+                  <div className="grid grid-cols-1 gap-2">
+                    <Input placeholder="Residence Name" value={residenceName} onChange={e => setResidenceName(e.target.value)} required />
+                    <Input placeholder="Section" value={residenceSection} onChange={e => setResidenceSection(e.target.value)} required />
+                    <Input placeholder="Room Number" value={residenceRoom} onChange={e => setResidenceRoom(e.target.value)} required />
                   </div>
+                  <Alert className="border-green-200 bg-green-50 text-green-800 mt-2">
+                    <AlertDescription>All three fields must be filled. </AlertDescription>
+                  </Alert>                </div>
                 )}
                 {userType === "staff" && (
                   <div className="space-y-2">
@@ -276,6 +298,7 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
             <Button
               type="submit"
               className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/95 transition-colors cursor-pointer"
+              disabled={isLoading}
             >
               {isLoading ? "Registering..." : "Sign Up"}
             </Button>

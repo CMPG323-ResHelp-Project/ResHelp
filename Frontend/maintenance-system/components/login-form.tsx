@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useRouter } from "next/navigation"
 
 import { Button } from "@/components/ui/button"
@@ -10,28 +10,44 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 
+import { Alert, AlertDescription } from "@/components/ui/alert"
+
 import { signInWithEmailAndPassword } from "firebase/auth"
 import { auth } from "@/lib/firebase" 
 
 type LoginFormProps = {
   onViewChange: () => void
+  onForgotPassword: () => void
 }
 
-export function LoginForm({ onViewChange }: LoginFormProps) {
+export function LoginForm({ onViewChange, onForgotPassword }: LoginFormProps) {
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
   const [userType, setUserType] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [message, setMessage] = useState<string | null>(null)
   const router = useRouter()
+
+  // Auto-dismiss alerts after 5s
+  useEffect(() => {
+    if (error || message) {
+      const timer = setTimeout(() => {
+        setError(null)
+        setMessage(null)
+      }, 5000)
+      return () => clearTimeout(timer)
+    }
+  }, [error, message])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setMessage(null)
   
     if (!userType) {
-      alert("Please select your role before signing in.");
-      return;
+      setError("Please select your role before signing in.")
+      return
     }
   
     setIsLoading(true)
@@ -54,8 +70,12 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
           throw new Error(errorData.error || "Manager login failed.")
         }
   
-        const data = await response.json()
-        router.push("/manager/dashboard")
+        await response.json()
+        setMessage("Manager login successful! Redirecting...")
+        setTimeout(() => {
+          router.push("/manager/dashboard")
+          setIsLoading(false)
+        }, 1500)
         return
       }
   
@@ -91,20 +111,32 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
   
       switch (data.userType.toLowerCase()) {
         case "student":
-          router.push("/student/dashboard")
+          setMessage("Login successful! Redirecting...")
+          setTimeout(() => {
+            router.push("/student/dashboard")
+            setIsLoading(false)
+          }, 1500)
           break
         case "staff":
-          router.push("/staff/dashboard")
+          setMessage("Login successful! Redirecting...")
+          setTimeout(() => {
+            router.push("/staff/dashboard")
+            setIsLoading(false)
+          }, 1500)
           break
         default:
-          alert("User role not recognized.")
+          setError("User role not recognized.")
+          setIsLoading(false)
           break
       }
     } catch (err: any) {
       console.error("Login error:", err)
-      alert(err.message)
-    } finally {
-      setIsLoading(false)
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password') {
+        setError("Incorrect email or password.")
+      } else {
+        setError(err.message || "An error occurred during login.")
+      }
+      setIsLoading(false) // stop loading on error
     }
   }
 
@@ -119,7 +151,18 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
       <Card className="w-full">
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {error && <div className="text-red-500 text-sm text-center">{error}</div>}
+            {/* Styled alerts */}
+            {error && (
+              <Alert className="border-red-200 bg-red-50 text-red-800">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+            {message && (
+              <Alert className="border-green-200 bg-green-50 text-green-800">
+                <AlertDescription>{message}</AlertDescription>
+              </Alert>
+            )}
+
             <div className="space-y-2">
               <Label htmlFor="email">Email Address</Label>
               <Input
@@ -146,7 +189,8 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
                   type="button"
                   variant="link"
                   className="p-0 h-auto text-sm"
-                  onClick={() => router.push("/forgot-password")}
+                  onClick={onForgotPassword} // 🔑 opens Forgot Password view
+                  disabled={isLoading}       // 🔒 disable when signing in
                 >
                   Forgot password?
                 </Button>
@@ -177,6 +221,7 @@ export function LoginForm({ onViewChange }: LoginFormProps) {
               variant="outline"
               className="w-full h-11 bg-transparent border-primary text-primary hover:bg-transparent transition-colors"
               onClick={onViewChange}
+              disabled={isLoading} // 🔒 disable when signing in
             >
               Sign Up
             </Button>
