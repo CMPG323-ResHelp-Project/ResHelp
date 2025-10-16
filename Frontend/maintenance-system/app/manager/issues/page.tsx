@@ -51,7 +51,7 @@ type Issue = {
   location: string;
   isUrgent: boolean;
   status: "Pending" | "Assigned" | "Resolved" | "Cancelled" | "In Progress";
-  ReportedAt: string; // currently, we use this, but Firestore has ReportedAt
+  reportedAt: string; // currently, we use this, but Firestore has ReportedAt
   reporterEmail: string;
   reporterName: string;
 };
@@ -64,7 +64,7 @@ export default function ManagerIssuesPage() {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [selectedStatus, setSelectedStatus] = useState<string>("All");
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('desc');
-  const [sortKey, setSortKey] = useState<'ReportedAt' | 'status'>('ReportedAt');
+  const [sortKey, setSortKey] = useState<'reportedAt' | 'status'>('reportedAt');
   const [selectedRequestToDelete, setSelectedRequestToDelete] = useState<number | null>(null);
   const [editingRequest, setEditingRequest] = useState<Issue | null>(null);
   const [confirmationMessage, setConfirmationMessage] = useState<string | null>(null);
@@ -95,7 +95,7 @@ export default function ManagerIssuesPage() {
   
         const issuesList: Issue[] = await response.json();
         console.log("Fetched issues:", issuesList);
-        setIssues(issuesList); // <-- use requests state, like staff uses staff state
+        setIssues(issuesList); 
       } catch (err: any) {
         setErrorMessage(err.message);
       } finally {
@@ -106,12 +106,9 @@ export default function ManagerIssuesPage() {
     fetchIssues();
   }, []);
    
-
-  
-// API Handling Logic for UPDATE Issue 
 const handleUpdateIssue = async (e?: React.FormEvent) => {
   if (e) e.preventDefault();
-  if (!editingRequest) return; // nothing to update
+  if (!editingRequest) return; 
 
   // 🔎 Validation should live here, not just in the button
   if (
@@ -371,9 +368,9 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
   );
   
   const sortedRequests = [...filteredRequests].sort((a, b) => {
-    if (sortKey === 'ReportedAt') {
-      const dateA = new Date(a.ReportedAt).getTime() || 0;
-      const dateB = new Date(b.ReportedAt).getTime() || 0;
+    if (sortKey === 'reportedAt') {
+      const dateA = new Date(a.reportedAt).getTime() || 0;
+      const dateB = new Date(b.reportedAt).getTime() || 0;
       
       return sortDirection === 'asc' ? dateA - dateB : dateB - dateA;
 
@@ -506,7 +503,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
             </SelectContent>
           </Select>
           <Button variant="outline" onClick={() => toggleSortDirection('ReportedAt')} className="p-2">
-            Sort by Date ({sortKey === 'ReportedAt' ? (sortDirection === 'asc' ? 'Oldest' : 'Newest') : 'Date'}) <ArrowUpDown className="ml-2 h-4 w-4" />
+            Sort by Date ({sortKey === 'reportedAt' ? (sortDirection === 'asc' ? 'Oldest' : 'Newest') : 'Date'}) <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         </div>
 
@@ -563,7 +560,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
 </Badge>
 
         </TableCell>
-        <TableCell>{formatDateTimeSafe(r.ReportedAt)}</TableCell>
+        <TableCell>{formatDateTimeSafe(r.reportedAt)}</TableCell>
         <TableCell className="flex gap-2">
   {/* Edit button */}
   <Button
