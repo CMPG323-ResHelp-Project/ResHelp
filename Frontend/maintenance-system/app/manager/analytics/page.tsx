@@ -9,10 +9,12 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, TrendingDown, BarChart3, Calendar, AlertTriangle } from "lucide-react";
 import domtoimage from 'dom-to-image-more';
+import jsPDF from 'jspdf';
 
 export default function AnalyticsPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false);
   
   const [detailedTrends, setDetailedTrends] = useState<any[]>([]);
   const [buildingPerformance, setBuildingPerformance] = useState<any[]>([]);
@@ -22,7 +24,6 @@ export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("7d");
   const [buildingFilter, setBuildingFilter] = useState("all");
 
-  // Create a ref for the component to be exported
   const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -61,23 +62,46 @@ export default function AnalyticsPage() {
   };
 
   const handleExportReport = () => {
-    const node = document.body;
+    const node = reportRef.current;
+    if (!node) {
+      console.error("Report element not found!");
+      return;
+    }
+    setIsExporting(true);
+
+    const originalClasses = node.className;
+    
+    node.className = 'w-[1200px] p-6 bg-gray-50';
 
     setTimeout(() => {
-      domtoimage.toPng(node, {
-          quality: 0.95,
-          bgcolor: '#ffffff', 
-        })
-        .then(function (dataUrl: string) {
-            const link = document.createElement('a');
-            link.download = `full-page-report-${new Date().toISOString().slice(0, 10)}.png`;
-            link.href = dataUrl;
-            link.click();
-        })
-        .catch(function (error: any) {
-            console.error('Full page screenshot failed!', error);
-        });
-    }, 500); 
+        domtoimage.toPng(node, {
+            quality: 0.98,
+            bgcolor: '#f9fafb',
+          })
+          .then(function (dataUrl: string) {
+              const img = new Image();
+              img.src = dataUrl;
+              img.onload = () => {
+                  const imgWidth = img.width;
+                  const imgHeight = img.height;
+                  const orientation = imgWidth > imgHeight ? 'l' : 'p';
+                  const pdf = new jsPDF({
+                      orientation,
+                      unit: 'px',
+                      format: [imgWidth, imgHeight]
+                  });
+                  pdf.addImage(dataUrl, 'PNG', 0, 0, imgWidth, imgHeight);
+                  pdf.save(`analytics-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+              }
+          })
+          .catch(function (error: any) {
+              console.error('PDF export failed!', error);
+          })
+          .finally(() => {
+              node.className = originalClasses;
+              setIsExporting(false);
+          });
+    }, 100); 
   };
 
   return (
@@ -96,9 +120,9 @@ export default function AnalyticsPage() {
               <p className="text-gray-500">In-depth maintenance management insights</p>
             </div>
           </div>
-          <Button onClick={handleExportReport} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-2">
+          <Button onClick={handleExportReport} disabled={isLoading || isExporting} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-2 disabled:opacity-50">
             <Download className="h-4 w-4" />
-            <span>Export Report</span>
+            <span>{isExporting ? 'Exporting...' : 'Export Report'}</span>
           </Button>
         </div>
 
