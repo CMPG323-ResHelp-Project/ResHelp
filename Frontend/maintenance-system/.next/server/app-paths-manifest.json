@@ -1,5 +1,3 @@
 {
-  "/manager/dashboard/page": "app/manager/dashboard/page.js",
-  "/page": "app/page.js",
   "/manager/analytics/page": "app/manager/analytics/page.js"
 }
