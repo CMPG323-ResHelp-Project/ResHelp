@@ -14,7 +14,7 @@ import jsPDF from 'jspdf';
 export default function AnalyticsPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
-  const [isExporting, setIsExporting] = useState(false); // State for export button
+  const [isExporting, setIsExporting] = useState(false);
   
   const [detailedTrends, setDetailedTrends] = useState<any[]>([]);
   const [buildingPerformance, setBuildingPerformance] = useState<any[]>([]);
@@ -67,49 +67,48 @@ export default function AnalyticsPage() {
       console.error("Report element not found!");
       return;
     }
+    setIsExporting(true);
 
-    setIsExporting(true); 
+    const originalClasses = node.className;
+    
+    node.className = 'w-[1200px] p-6 bg-gray-50';
 
-    domtoimage.toPng(node, {
-        quality: 0.98,
-        bgcolor: '#ffffff',
-        style: {
-          transform: 'scale(1)',
-          transformOrigin: 'top left'
-        }
-      })
-      .then(function (dataUrl: string) {
-          const pdf = new jsPDF('p', 'mm', 'a4');
-          
-          const img = new Image();
-          img.src = dataUrl;
-          img.onload = () => {
-            const imgWidth = img.width;
-            const imgHeight = img.height;
-            
-            const pdfWidth = pdf.internal.pageSize.getWidth();
-            const pdfHeight = pdf.internal.pageSize.getHeight();
-            
-            const ratio = pdfWidth / imgWidth;
-            const scaledHeight = imgHeight * ratio;
-
-            pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, scaledHeight);
-            
-            pdf.save(`analytics-report-${new Date().toISOString().slice(0, 10)}.pdf`);
-            setIsExporting(false); 
-          }
-      })
-      .catch(function (error: any) {
-          console.error('PDF export failed!', error);
-          setIsExporting(false); 
-      });
+    setTimeout(() => {
+        domtoimage.toPng(node, {
+            quality: 0.98,
+            bgcolor: '#f9fafb',
+          })
+          .then(function (dataUrl: string) {
+              const img = new Image();
+              img.src = dataUrl;
+              img.onload = () => {
+                  const imgWidth = img.width;
+                  const imgHeight = img.height;
+                  const orientation = imgWidth > imgHeight ? 'l' : 'p';
+                  const pdf = new jsPDF({
+                      orientation,
+                      unit: 'px',
+                      format: [imgWidth, imgHeight]
+                  });
+                  pdf.addImage(dataUrl, 'PNG', 0, 0, imgWidth, imgHeight);
+                  pdf.save(`analytics-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+              }
+          })
+          .catch(function (error: any) {
+              console.error('PDF export failed!', error);
+          })
+          .finally(() => {
+              node.className = originalClasses;
+              setIsExporting(false);
+          });
+    }, 100); 
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation userType="manager" currentPage="/manager/analytics" />
 
-      <div ref={reportRef} className="max-w-7xl mx-auto p-6 bg-white">
+      <div ref={reportRef} className="max-w-7xl mx-auto p-6 bg-gray-50">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
             <Button variant="outline" onClick={() => router.push("/manager/dashboard")} className="flex items-center space-x-2">
