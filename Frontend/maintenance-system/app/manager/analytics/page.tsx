@@ -8,11 +8,15 @@ import { BarChart, Bar, AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, R
 import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { ArrowLeft, Download, TrendingDown, BarChart3, Calendar, AlertTriangle } from "lucide-react";
+
+// Import the necessary libraries
 import domtoimage from 'dom-to-image-more';
+import jsPDF from 'jspdf';
 
 export default function AnalyticsPage() {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(true);
+  const [isExporting, setIsExporting] = useState(false); // State for export button
   
   const [detailedTrends, setDetailedTrends] = useState<any[]>([]);
   const [buildingPerformance, setBuildingPerformance] = useState<any[]>([]);
@@ -22,7 +26,7 @@ export default function AnalyticsPage() {
   const [timeRange, setTimeRange] = useState("7d");
   const [buildingFilter, setBuildingFilter] = useState("all");
 
-  // Create a ref for the component to be exported
+  // This ref will target the specific area to be exported
   const reportRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -60,31 +64,66 @@ export default function AnalyticsPage() {
     return <div className="h-4 w-4" />;
   };
 
+  // --- UPDATED EXPORT FUNCTION ---
   const handleExportReport = () => {
-    const node = document.body;
+    const node = reportRef.current;
+    if (!node) {
+      console.error("Report element not found!");
+      return;
+    }
 
-    setTimeout(() => {
-      domtoimage.toPng(node, {
-          quality: 0.95,
-          bgcolor: '#ffffff', 
-        })
-        .then(function (dataUrl: string) {
-            const link = document.createElement('a');
-            link.download = `full-page-report-${new Date().toISOString().slice(0, 10)}.png`;
-            link.href = dataUrl;
-            link.click();
-        })
-        .catch(function (error: any) {
-            console.error('Full page screenshot failed!', error);
-        });
-    }, 500); 
+    setIsExporting(true); // Disable button
+
+    // Use dom-to-image to capture the report section as a high-quality PNG
+    domtoimage.toPng(node, {
+        quality: 0.98,
+        bgcolor: '#ffffff',
+        // This helps with rendering issues on complex layouts
+        style: {
+          transform: 'scale(1)',
+          transformOrigin: 'top left'
+        }
+      })
+      .then(function (dataUrl: string) {
+          // 1. Create a new PDF document. 'p' for portrait, 'mm' for millimeters, 'a4' for page size.
+          const pdf = new jsPDF('p', 'mm', 'a4');
+          
+          const img = new Image();
+          img.src = dataUrl;
+          img.onload = () => {
+            const imgWidth = img.width;
+            const imgHeight = img.height;
+            
+            // Get PDF page dimensions
+            const pdfWidth = pdf.internal.pageSize.getWidth();
+            const pdfHeight = pdf.internal.pageSize.getHeight();
+            
+            // Calculate the aspect ratio to fit the image to the PDF page width
+            const ratio = pdfWidth / imgWidth;
+            const scaledHeight = imgHeight * ratio;
+
+            // 2. Add the captured image to the PDF
+            // If the image is taller than one page, it will be clipped, but this is standard for this method.
+            pdf.addImage(dataUrl, 'PNG', 0, 0, pdfWidth, scaledHeight);
+            
+            // 3. Save the PDF
+            pdf.save(`analytics-report-${new Date().toISOString().slice(0, 10)}.pdf`);
+            setIsExporting(false); // Re-enable button
+          }
+      })
+      .catch(function (error: any) {
+          console.error('PDF export failed!', error);
+          setIsExporting(false); // Re-enable button on error
+      });
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <Navigation userType="manager" currentPage="/manager/analytics" />
 
-      <div ref={reportRef} className="max-w-7xl mx-auto p-6 bg-gray-50">
+      {/* The ref is attached to this div, which is what will be exported */}
+      <div ref={reportRef} className="max-w-7xl mx-auto p-6 bg-white">
+        {/* The non-exported header section */}
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center space-x-4">
             <Button variant="outline" onClick={() => router.push("/manager/dashboard")} className="flex items-center space-x-2">
@@ -96,9 +135,9 @@ export default function AnalyticsPage() {
               <p className="text-gray-500">In-depth maintenance management insights</p>
             </div>
           </div>
-          <Button onClick={handleExportReport} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-2">
+          <Button onClick={handleExportReport} disabled={isLoading || isExporting} className="bg-indigo-600 hover:bg-indigo-700 text-white flex items-center space-x-2 disabled:opacity-50">
             <Download className="h-4 w-4" />
-            <span>Export Report</span>
+            <span>{isExporting ? 'Exporting...' : 'Export Report'}</span>
           </Button>
         </div>
 
@@ -135,6 +174,7 @@ export default function AnalyticsPage() {
           </CardContent>
         </Card>
 
+        {/* ... (rest of your component JSX remains exactly the same) ... */}
         {/* Daily Issue Trends Card */}
         <Card className="mb-6 shadow-sm">
           <CardHeader><CardTitle>Daily Issue Trends</CardTitle></CardHeader>
