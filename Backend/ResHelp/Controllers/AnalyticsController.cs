@@ -235,10 +235,10 @@ namespace ResHelp.Controllers
 
                     var resolutionTimes = group.Select(doc => {
                         var issue = doc.ToDictionary();
-                        if (issue.TryGetValue("ReportedAt", out var rAtObj) && rAtObj is Timestamp rAt &&
-                            issue.TryGetValue("ResolvedAt", out var resolvedAtObj) && resolvedAtObj is Timestamp resolvedAt)
+                        if (issue.TryGetValue("ReportedAt", out var reportedAtObj) && reportedAtObj is Timestamp reportedAt &&
+                            issue.TryGetValue("AssignedAt", out var assignedAtObj) && assignedAtObj is Timestamp assignedAt)
                         {
-                            return (resolvedAt.ToDateTime() - rAt.ToDateTime()).TotalHours;
+                            return (assignedAt.ToDateTime() - reportedAt.ToDateTime()).TotalHours;
                         }
                         return -1.0; 
                     }).Where(h => h >= 0).ToList(); 
