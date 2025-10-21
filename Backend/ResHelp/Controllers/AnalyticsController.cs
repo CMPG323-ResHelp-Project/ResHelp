@@ -220,12 +220,12 @@ namespace ResHelp.Controllers
         public async Task<IActionResult> GetStaffPerformance()
         {
             var snapshot = await _firestoreDb.Collection("issues")
-                .WhereNotEqualTo("ResolvedBy", null)
+                .WhereNotEqualTo("DriverEmail", null)
                 .GetSnapshotAsync();
 
             var staffPerformance = snapshot.Documents
                 .Where(doc => doc.ToDictionary().GetValueOrDefault("Status")?.ToString()?.ToLower() == "resolved")
-                .GroupBy(doc => doc.ToDictionary().GetValueOrDefault("ResolvedBy")?.ToString())
+                .GroupBy(doc => doc.ToDictionary().GetValueOrDefault("DriverEmail")?.ToString())
                 .Select(group => {
                     var ratings = group
                         .Select(doc => doc.ToDictionary().GetValueOrDefault("Rating"))
