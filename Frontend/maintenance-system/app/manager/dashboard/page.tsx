@@ -65,7 +65,8 @@ export default function ManagerDashboard() {
 
         if (categoryRes.ok) {
           const categoryRawData = await categoryRes.json();
-          const categoryColors = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#3b82f6"];
+          const categoryColors = ["#6366f1", "#10b981", "#f59e0b", "#ef4444", "#3b82f6", "#6b7280"
+            , "#ec4899"];
           setCategoryData(categoryRawData.map((entry: any, index: number) => ({
             ...entry,
             color: categoryColors[index % categoryColors.length],
