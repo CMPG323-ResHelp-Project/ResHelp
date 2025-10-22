@@ -292,7 +292,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
     setTimeout(() => setConfirmationMessage(null), 3000);
   };
 
-  const toggleSortDirection = (key: 'ReportedAt' | 'status') => {
+  const toggleSortDirection = (key: 'reportedAt' | 'status') => {
     if (sortKey === key) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
     } else {
@@ -502,7 +502,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
               <SelectItem value="Cancelled">Cancelled</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={() => toggleSortDirection('ReportedAt')} className="p-2">
+          <Button variant="outline" onClick={() => toggleSortDirection('reportedAt')} className="p-2">
             Sort by Date ({sortKey === 'reportedAt' ? (sortDirection === 'asc' ? 'Oldest' : 'Newest') : 'Date'}) <ArrowUpDown className="ml-2 h-4 w-4" />
           </Button>
         </div>
