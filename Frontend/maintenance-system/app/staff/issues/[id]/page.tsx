@@ -24,7 +24,7 @@ type Issue = {
   reportedAt: string
   updatedAt: string
   isUrgent: boolean
-  imageUrl?: string
+  imageUrls: string[]
   location: string
   updates: { // Keep the updates type, but remove the rendering
     id: string
@@ -49,10 +49,10 @@ interface IssueConfirm {
 }
 
 /**
- * Renders a star rating display (e.g., ★★★☆☆) based on the score out of 5.
  * @param score The rating value (0 to 5).
  * @returns JSX.Element for the star rating.
  */
+
 const StarRatingDisplay = ({ score }: { score: number }) => {
   // Clamp score between 0 and 5
   const clampedScore = Math.max(0, Math.min(5, score));
@@ -123,6 +123,13 @@ export default function IssueDetails() {
 
         const data = await res.json()
 
+        // ✅ FIX: Handle multiple URLs (pipe-separated)
+        const rawUrls: string = data.ImageUrl || ""
+        const finalImageUrls: string[] = rawUrls
+          .split("|")
+          .map((url: string) => url.trim())
+          .filter((url: string) => url.length > 0)
+
         const normalizedIssue: Issue = {
           id: data.Id,
           title: data.Title,
@@ -133,7 +140,7 @@ export default function IssueDetails() {
           reportedAt: data.ReportedAt,
           updatedAt: data.UpdatedAt,
           isUrgent: data.IsUrgent,
-          imageUrl: data.ImageUrl,
+          imageUrls: finalImageUrls,
           location: data.Location,
           updates: data.Updates?.map((u: any) => ({
             id: u.Id,
@@ -286,12 +293,28 @@ export default function IssueDetails() {
 
                 {/* Issue Image */}
                 <div className="mb-6">
-                  <h4 className="text-lg font-semibold mb-2 text-gray-700">Attachment</h4>
-                  <img
-                    src={issue.imageUrl || "/placeholder.svg"}
-                    alt="Issue photo"
-                    className="w-full max-w-sm rounded-lg shadow-md transition-shadow hover:shadow-xl cursor-pointer"
-                  />
+                  <h4 className="text-lg font-semibold mb-2 text-gray-700">Attachments ({issue.imageUrls.length})</h4>
+                  {issue.imageUrls.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {issue.imageUrls.map((url, index) => (
+                        <a
+                          key={index}
+                          href={url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <img
+                            src={url}
+                            alt={`Issue photo ${index + 1}`}
+                            className="w-full h-auto object-cover rounded-lg shadow-md transition-all duration-200 hover:shadow-xl hover:scale-[1.02] cursor-pointer aspect-square"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 italic text-sm">No attachments provided.</p>
+                  )}
                 </div>
 
                 {/* *** RATING SECTION (MODIFIED FOR APPEALING DISPLAY) *** */}

@@ -9,15 +9,11 @@ import { useRouter } from "next/navigation"
 import React, { useState, useEffect } from "react"
 import { auth } from "@/lib/firebase"
 
-// =================================================================
-// ⭐️ TIME UTILITY FUNCTION (Updated for "YYYY/MM/DD, HH:mm:ss" format)
-// =================================================================
-
 /**
- * Formats an ISO date string into the requested "YYYY/MM/DD, HH:mm:ss" format.
  * @param dateString The ISO date/time string (e.g., "2025-10-05T17:53:46.8635690Z")
  * @returns A formatted string, e.g., "2025/10/05, 17:53:46" or "N/A".
  */
+
 const formatDateTime = (dateString: string | undefined): string => {
   if (!dateString) return "N/A"
   
@@ -42,10 +38,6 @@ const formatDateTime = (dateString: string | undefined): string => {
     return "Error Formatting" // Fallback on parsing error
   }
 }
-
-// =================================================================
-// ⭐️ INTERFACE & MOCK DATA (Using ISO Date Strings)
-// =================================================================
 
 interface Issue {
   id: string
@@ -72,7 +64,6 @@ const mockDashboardStats = {
   urgentIssues: 1,
 }
 
-// Helper for generating recent ISO dates for mock data
 // Using current time as a base for realistic mock data
 const now = new Date("2025-10-06T02:57:43Z"); // Using current time (2:57 AM SAST) as base
 const getRecentISO = (hoursAgo: number) => {
@@ -104,12 +95,8 @@ const mockIssueHistory: Issue[] = [
   { id: "865", title: "Broken chair in computer lab", status: "resolved", priority: "low", isUrgent: false, student: "Liam Wilson", room: "Lab 2", reportedAt: getOlderISO(14), updatedAt: getOlderISO(14), rating: 3.8 }, // Resolved & Rated
 ]
 
-// =================================================================
-// ⭐️ STAR RATING COMPONENT (Unchanged)
-// =================================================================
 
 /**
- * Renders a star rating display (e.g., ★★★☆☆) based on the score out of 5.
  * @param score The rating value (0 to 5).
  * @returns JSX.Element for the star rating.
  */
@@ -135,9 +122,6 @@ const StarRatingDisplay = ({ score }: { score: number }) => {
   );
 };
 
-// =================================================================
-// ⭐️ STAFF DASHBOARD COMPONENT
-// =================================================================
 
 export default function StaffDashboard() {
   const [dashboardStats, setDashboardStats] = useState(mockDashboardStats)

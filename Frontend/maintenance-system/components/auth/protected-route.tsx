@@ -1,9 +1,8 @@
-// components/auth/protected-route.tsx
 "use client"
 
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { auth } from "@/lib/firebase" // Ensure this path is correct
+import { auth } from "@/lib/firebase" 
 
 interface ProtectedRouteProps {
   children: React.ReactNode

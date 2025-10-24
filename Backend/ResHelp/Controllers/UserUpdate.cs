@@ -19,7 +19,7 @@ namespace ResHelp.Controllers
             _firestoreDb = firestoreDb;
         }
 
-        // 🎯 Endpoint for updating user details, excluding email.
+        // Endpoint for updating user details, excluding email.
         [HttpPost("profile")]
         public async Task<IActionResult> UpdateProfile([FromBody] UserDto userProfileUpdate, [FromHeader(Name = "Authorization")] string authorization)
         {
@@ -60,7 +60,6 @@ namespace ResHelp.Controllers
                 if (!string.IsNullOrEmpty(userProfileUpdate.Address)) updateData["Address"] = userProfileUpdate.Address;
                 if (!string.IsNullOrEmpty(userProfileUpdate.MaintenanceType)) updateData["MaintenanceType"] = userProfileUpdate.MaintenanceType;
 
-                // ⚠️ FINAL SECURITY CHECK: Ensure Email update is strictly ignored 
                 // (even if the frontend mistakenly sends it).
                 if (userProfileUpdate.Email != null) 
                 {

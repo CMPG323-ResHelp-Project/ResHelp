@@ -44,6 +44,18 @@ interface Issue {
     DriverPhone: string;
 }
 
+const parseImageUrls = (imageUrlString: string): string[] => {
+    if (!imageUrlString) return [];
+    
+    // FIX: Split by pipe symbol ('|') to handle your backend format
+    const urls = imageUrlString
+        .split('|') 
+        .map(url => url.trim())
+        .filter(url => url.length > 0);
+        
+    return urls.slice(0, 3);
+};
+
 // Helper to format date and time
 function formatDateTime(timestamp: any): string {
   if (!timestamp) return "";
@@ -194,7 +206,8 @@ const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave 
     const [newImageFile, setNewImageFile] = useState<File | null>(null);
     const [newImageUrl, setNewImageUrl] = useState<string>(''); // Holds the URL if a new file is uploaded
     const [isUploading, setIsUploading] = useState(false); // Used to disable the submit button
-    
+    const [currentImageUrls, setCurrentImageUrls] = useState<string[]>(parseImageUrls(issue.ImageUrl));
+
     const [editForm, setEditForm] = useState<Omit<EditIssueForm, 'ImageUrl'>>({ // Omit ImageUrl for form fields
         Title: issue.Title,
         Description: issue.Description,
@@ -220,38 +233,58 @@ const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave 
         setEditForm(prev => ({ ...prev, Category: value }));
     };
 
+
+    const handleRemoveImage = (indexToRemove: number) => {
+        setCurrentImageUrls(prevUrls => 
+            prevUrls.filter((_, index) => index !== indexToRemove)
+        );
+        // If a new file was uploaded and we remove the last/only URL, clear the new file state
+        if (newImageFile && currentImageUrls.length === 1) {
+            setNewImageFile(null);
+        }
+    };
+
+    
     // 🔑 UPDATED: Handle file selection, upload, and URL generation
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
+        
+        // Check image limit BEFORE upload
+        if (currentImageUrls.length >= 3) {
+            alert("You have reached the maximum limit of 3 images. Please remove an existing image before uploading a new one.");
+            // Reset input field to allow re-selection/re-try
+            e.target.value = ''; 
+            return;
+        }
+
         if (!file) {
             setNewImageFile(null);
-            setNewImageUrl('');
             return;
         }
         
         setNewImageFile(file);
-        setNewImageUrl(''); // Clear previous upload URL before starting
 
         try {
             setIsUploading(true); 
-            // Importing Firebase storage utilities
+            // Lazy import Firebase modules
             const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
-            const { firebase2 } = await import("@/lib/firebase2"); // Assumed correct import
+            const { firebase2 } = await import("@/lib/firebase2"); 
 
             const storage = getStorage(firebase2);
-            // Use file name and current timestamp for a unique path
             const storageRef = ref(storage, `issue-images/${file.name}-${Date.now()}`);
             
             await uploadBytes(storageRef, file);
             const url = await getDownloadURL(storageRef);
             
-            setNewImageUrl(url); // Set the new URL
-            console.log("Image uploaded successfully:", url);
+            // 🔑 IMPORTANT: ADD the new URL to the currentImageUrls array
+            setCurrentImageUrls(prevUrls => [...prevUrls, url]); 
+            
+            // Clear the input to allow another file selection immediately
+            e.target.value = '';
 
         } catch (err) {
             console.error("Image upload failed:", err);
-            setNewImageFile(null); // Clear file selection and URL on failure
-            setNewImageUrl('');
+            setNewImageFile(null); 
             alert("Failed to upload image. Please check the file and try again.");
         } finally {
             setIsUploading(false);
@@ -269,15 +302,14 @@ const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave 
 
         setIsSaving(true);
         
-        // 🔑 UPDATED: Determine the final URL to submit
-        const finalImageUrl = newImageUrl // 1. Use newly uploaded URL
-            || issue.ImageUrl // 2. Use existing URL if no new one was uploaded
-            || ""; // 3. Default to empty string
+        // 🔑 FIXED: Use the currentImageUrls array (which includes additions and removals)
+        // to construct the final pipe-separated string for the backend.
+        const finalImageUrl = currentImageUrls.join('|');
             
         // Construct the full form object including the ImageUrl
         const fullForm: EditIssueForm = {
             ...editForm,
-            ImageUrl: finalImageUrl
+            ImageUrl: finalImageUrl // This now holds the correct, updated list of URLs
         };
 
         await onSave(issue.Id, fullForm);
@@ -307,76 +339,90 @@ const EditIssueModal: React.FC<EditIssueModalProps> = ({ issue, onClose, onSave 
                         </div>
 
                         {/* Image Display and Replacement Section */}
-                        <div className="space-y-2 p-3 border rounded-lg bg-gray-50">
-                            <Label htmlFor="issueImage" className="flex items-center gap-2">
-                                <ImageIcon className="h-4 w-4" /> Issue Image
-                            </Label>
-                            
-                            {/* Display Existing Image in a compact format */}
-                            {(issue.ImageUrl || newImageUrl) ? (
-                                <div className="flex items-center gap-4 p-2 border rounded-lg bg-white/70">
-                                    {/* Compact Thumbnail - show new URL if uploaded, else show existing */}
-                                    <div className="w-20 h-20 overflow-hidden rounded-md border shrink-0">
-                                        <img 
-                                            src={newImageUrl || issue.ImageUrl} 
-                                            alt={`Issue ${issue.Id.slice(0, 8)}`} 
-                                            className="object-cover w-full h-full"
-                                        />
-                                    </div>
-                                    <div className="flex-1 space-y-1 min-w-0">
-                                        <p className="text-sm font-semibold text-foreground">
-                                            {newImageUrl ? "New Image Uploaded" : "Current Image Attached"}
-                                        </p>
-                                        <a 
-                                            href={newImageUrl || issue.ImageUrl} 
-                                            target="_blank" 
-                                            rel="noopener noreferrer" 
-                                            className="text-sm text-blue-600 hover:underline flex items-center gap-1 truncate"
-                                        >
-                                            View Full Image (Link)
-                                        </a>
-                                        <p className="text-xs text-muted-foreground truncate" title={newImageUrl || issue.ImageUrl}>
-                                            URL: {(newImageUrl || issue.ImageUrl).substring(0, 40)}...
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <div className="text-center py-4 border-dashed border-2 rounded-lg text-muted-foreground">
-                                    <ImageIcon className="h-6 w-6 mx-auto mb-2" />
-                                    <p>No image currently attached.</p>
-                                </div>
-                            )}
+<div className="space-y-2 p-3 border rounded-lg bg-gray-50">
+    <Label htmlFor="issueImage" className="flex items-center gap-2">
+        <ImageIcon className="h-4 w-4" /> Issue Image(s)
+    </Label>
+    
+    {/* Display ALL Existing/New Images from the currentImageUrls state array */}
+    {currentImageUrls.length > 0 ? (
+        <div className="flex flex-wrap gap-2 p-2 border rounded-lg bg-white/70">
+            {/* Map over the currentImageUrls array */}
+            {currentImageUrls.map((url, index) => (
+                <div key={index} className="w-20 h-20 overflow-hidden rounded-md border shrink-0 relative group">
+                    <img 
+                        src={url} 
+                        alt={`Issue ${issue.Id.slice(0, 8)} Image ${index + 1}`} 
+                        className="object-cover w-full h-full"
+                    />
+                    
+                    {/* 🔑 REMOVE BUTTON: Allows individual image deletion */}
+                    <Button 
+                        type="button" 
+                        variant="destructive" 
+                        size="icon" 
+                        className="absolute top-1 right-1 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity p-0 z-10"
+                        onClick={() => handleRemoveImage(index)} // Calls handler to remove this URL
+                        title="Remove Image"
+                    >
+                        <X className="h-3 w-3" />
+                    </Button>
+                    
+                    {/* View Link Overlay */}
+                    <a 
+                        href={url} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="absolute inset-0 bg-black/50 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        title="View Full Image"
+                    >
+                        <Search className="h-5 w-5 text-white" />
+                    </a>
+                </div>
+            ))}
+            <p className="text-sm self-end p-2 text-muted-foreground">
+                {/* Display current count */}
+                {currentImageUrls.length} image(s) attached.
+            </p>
+        </div>
+    ) : (
+        <div className="text-center py-4 border-dashed border-2 rounded-lg text-muted-foreground">
+            <ImageIcon className="h-6 w-6 mx-auto mb-2" />
+            <p>No image(s) currently attached.</p>
+        </div>
+    )}
 
-                            {/* Image Replacement/Upload Alternative */}
-                            <div className="pt-2">
-                                <Label htmlFor="imageUpload" className="text-sm font-medium">
-                                    {issue.ImageUrl ? "Replace Image" : "Upload Image"}
-                                </Label>
-                                <Input 
-                                    id="imageUpload" 
-                                    type="file" 
-                                    accept="image/*" 
-                                    onChange={handleFileChange}
-                                    className="mt-1"
-                                    disabled={isUploading} // Disable while an upload is in progress
-                                />
-                                {isUploading && (
-                                    <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
-                                        <Clock className="h-3 w-3 animate-spin" /> Uploading image...
-                                    </p>
-                                )}
-                                {newImageFile && !isUploading && newImageUrl && (
-                                    <p className="text-xs text-green-600 mt-1">
-                                        New image ready for submission.
-                                    </p>
-                                )}
-                                {newImageFile && !isUploading && !newImageUrl && (
-                                    <p className="text-xs text-red-600 mt-1">
-                                        Image upload failed. Please try selecting the file again.
-                                    </p>
-                                )}
-                            </div>
-                        </div>
+    {/* Image Replacement/Upload Alternative */}
+    <div className="pt-2">
+        <Label htmlFor="imageUpload" className="text-sm font-medium">
+            {/* 🔑 UPDATED LABEL: Shows current count / max limit */}
+            Upload New Image ({currentImageUrls.length} / 3)
+        </Label>
+        <Input 
+            id="imageUpload" 
+            type="file" 
+            accept="image/*" 
+            onChange={handleFileChange}
+            className="mt-1"
+            // 🔑 UPDATED DISABLED LOGIC: Disable if uploading OR max limit (3) is reached
+            disabled={isUploading || currentImageUrls.length >= 3} 
+        />
+        
+        {/* 🔑 NEW: Max Limit Warning Message */}
+        {currentImageUrls.length >= 3 && (
+            <p className="text-xs text-red-600 mt-1">
+                Maximum 3 images reached. Please remove one to upload a new one.
+            </p>
+        )}
+        
+        {isUploading && (
+            <p className="text-xs text-blue-600 mt-1 flex items-center gap-1">
+                <Clock className="h-3 w-3 animate-spin" /> Uploading image...
+            </p>
+        )}
+        {/* NOTE: Removed old newImageFile/newImageUrl status messages as they are obsolete with the new state management */}
+    </div>
+</div>
                         {/* END Image Section */}
 
                         <div className="grid grid-cols-2 gap-4">
@@ -460,7 +506,9 @@ export default function MyIssuesDashboard() {
     const [historySort, setHistorySort] = useState<"UpdatedAt_desc" | "UpdatedAt_asc">("UpdatedAt_desc");
     const [historyStatusFilter, setHistoryStatusFilter] = useState<string | null>(null);
     const [issueToRate, setIssueToRate] = useState<Issue | null>(null); // 🆕 New state for the rating modal
-    
+    const [imageUrls, setImageUrls] = useState<string[]>([]); 
+    const [imageUploading, setImageUploading] = useState(false);
+
     // 🔑 NEW: State to manage the issue being confirmed for cancellation
     const [issueToCancel, setIssueToCancel] = useState<Issue | null>(null);
     
@@ -646,54 +694,58 @@ export default function MyIssuesDashboard() {
         }
     }
 
+    
+
     // 🔑 UPDATED: handleSaveEdit now expects the full form including ImageUrl
-    const handleSaveEdit = async (issueId: string, form: EditIssueForm) => {
-        setError(null); // Clear previous errors
-        setIssueMessage(null); // Clear previous messages
-        try {
-            const { auth } = await import("@/lib/firebase")
-            const user = auth.currentUser
-            if (!user) throw new Error("User not logged in.")
-            const idToken = await user.getIdToken()
+// Inside MyIssuesDashboard component
+const handleSaveEdit = async (issueId: string, form: EditIssueForm) => {
+    setError(null); // Clear previous errors
+    setIssueMessage(null); // Clear previous messages
+    try {
+        // Assuming imports like auth and firebase2 are available in this scope
+        const { auth } = await import("@/lib/firebase")
+        const user = auth.currentUser
+        if (!user) throw new Error("User not logged in.")
+        const idToken = await user.getIdToken()
 
-            // Construct payload using camelCase for JSON keys (standard practice)
-            const payload = {
-                title: form.Title,
-                description: form.Description,
-                category: form.Category,
-                priority: form.Priority.toLowerCase(), // Ensure lowercase for backend consistency
-                location: form.Location,
-                // 🔑 UPDATED: Use the ImageUrl provided by the modal's form, which is guaranteed to be correct/new
-                imageUrl: form.ImageUrl, 
-                isUrgent: form.IsUrgentSafetyHazard, // Maps to C# IssueDto.IsUrgent
-            };
+        // Construct payload using camelCase for JSON keys (standard practice)
+        const payload = {
+            title: form.Title,
+            description: form.Description,
+            category: form.Category,
+            priority: form.Priority.toLowerCase(), // Ensure lowercase for backend consistency
+            location: form.Location,
+            // 🔑 FIXED: Use the ImageUrl property from the 'form' object passed by the modal
+            imageUrl: form.ImageUrl, 
+            isUrgent: form.IsUrgentSafetyHazard, 
+        };
 
-            // Send PUT request to the new C# endpoint
-            const response = await fetch(`http://localhost:5229/Issues/${issueId}`, {
-                method: "PUT",
-                headers: {
-                    "Content-Type": "application/json",
-                    "Authorization": `Bearer ${idToken}`,
-                },
-                body: JSON.stringify(payload),
-            })
+        // Send PUT request to the C# endpoint
+        const response = await fetch(`http://localhost:5229/Issues/${issueId}`, {
+            method: "PUT",
+            headers: {
+                "Content-Type": "application/json",
+                "Authorization": `Bearer ${idToken}`,
+            },
+            body: JSON.stringify(payload),
+        })
 
-            if (!response.ok) {
-                const errorData = await response.json();
-                throw new Error(errorData.error || `Failed to update issue: ${response.status}`);
-            }
-
-            setEditingIssue(null); // Close the modal
-            
-            // 🆕 Set the success message and clear it after a timeout
-            setIssueMessage(`Issue #${issueId.slice(0, 8)} updated successfully.`);
-            setTimeout(() => setIssueMessage(null), 5000); 
-
-            fetchIssues(); // Refresh the list to show changes
-        } catch (err: any) {
-            setError(err.message || "An error occurred while updating the issue.");
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || `Failed to update issue: ${response.status}`);
         }
+
+        setEditingIssue(null); // Close the modal
+        
+        // 🆕 Set the success message and clear it after a timeout
+        setIssueMessage(`Issue #${issueId.slice(0, 8)} updated successfully.`);
+        setTimeout(() => setIssueMessage(null), 5000); 
+
+        fetchIssues(); // Refresh the list to show changes
+    } catch (err: any) {
+        setError(err.message || "An error occurred while updating the issue.");
     }
+};
     // 🔑 END UPDATE LOGIC
     
     // 🔑 UPDATED: Initial handler to open the dialog
@@ -766,6 +818,17 @@ export default function MyIssuesDashboard() {
         }
     };
 
+    const parseImageUrls = (imageUrlString: string): string[] => {
+        if (!imageUrlString) return [];
+        
+        // FIX: Split by pipe symbol ('|') to handle your backend format
+        const urls = imageUrlString
+            .split('|') 
+            .map(url => url.trim())
+            .filter(url => url.length > 0);
+            
+        return urls.slice(0, 3);
+    };
 
     const activeIssues = useMemo(() => {
         // 1. Filter by status (Active statuses: pending, assigned, in-progress)
@@ -891,8 +954,7 @@ export default function MyIssuesDashboard() {
                             <AlertTriangle className="h-5 w-5" />
                             <CardTitle>Active Issues ({activeIssues.length})</CardTitle>
                         </div>
-                        <div className="flex gap-2">
-                            {/* 🔑 NEW: Search Input for Active Issues */}
+                        <div className="flex flex-wrap gap-2 justify-end">                            {/* 🔑 NEW: Search Input for Active Issues */}
                             <div className="relative w-48">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input
@@ -963,13 +1025,16 @@ export default function MyIssuesDashboard() {
                                         <p className="text-sm text-muted-foreground line-clamp-2">{issue.Description}</p>
                                         
                                         {/* 🔑 ADDED: Thumbnail display in the active issue card */}
-                                        {issue.ImageUrl && (
-                                            <div className="w-16 h-12 overflow-hidden rounded-md border float-right ml-4">
-                                                <img 
-                                                    src={issue.ImageUrl} 
-                                                    alt="Issue Thumbnail" 
-                                                    className="object-cover w-full h-full"
-                                                />
+                                        {parseImageUrls(issue.ImageUrl).length > 0 && (
+                                            <div className="flex gap-1.5 justify-end mb-2">                                                {parseImageUrls(issue.ImageUrl).map((url, index) => (
+                                                    <div key={index} className="w-16 h-12 overflow-hidden rounded-md border border-gray-300">
+                                                        <img 
+                                                            src={url} 
+                                                            alt={`Issue Thumbnail ${index + 1}`} 
+                                                            className="object-cover w-full h-full"
+                                                        />
+                                                    </div>
+                                                ))}
                                             </div>
                                         )}
                                         {/* 🔑 END ADDED */}
@@ -1039,8 +1104,7 @@ export default function MyIssuesDashboard() {
                 <Card>
                     <CardHeader className="flex flex-row items-center justify-between">
                         <CardTitle>Issue History ({historyIssues.length})</CardTitle>
-                        <div className="flex gap-2">
-                             {/* 🔑 NEW: Search Input for History Issues */}
+                        <div className="flex flex-wrap gap-2 justify-end">                             {/* 🔑 NEW: Search Input for History Issues */}
                              <div className="relative w-48">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                                 <Input

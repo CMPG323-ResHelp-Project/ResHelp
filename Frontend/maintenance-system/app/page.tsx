@@ -108,6 +108,12 @@ export default function LoginPage() {
                 </Button>
               </>
             )}
+            {/* New content for the bottom-right */}
+          <div className="w-full max-w-md mx-auto pt-4 border-t border-border/50 lg:border-t-0 lg:pt-0">
+            <p className="text-xs text-center text-muted-foreground/80">
+              &copy; 2025 ResHelp. All rights reserved.
+            </p>
+          </div>
           </div>
         </div>
       </div>

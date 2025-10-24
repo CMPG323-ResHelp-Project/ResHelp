@@ -13,13 +13,11 @@ import { Search, Filter, AlertTriangle, Clock, CheckCircle, Wrench, ChevronRight
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Trash2 } from "lucide-react"; // optional icon, can change to Check or Info
 
-// -------------------- Helper Functions --------------------
-
 /**
- * Formats an ISO date string into the requested "YYYY/MM/DD, HH:mm:ss" format.
  * @param dateString The ISO date/time string (e.g., "2025-10-05T17:53:46.8635690Z")
  * @returns A formatted string, e.g., "2025/10/05, 17:53:46" or "N/A".
  */
+
 const formatDateTime = (dateString: string | undefined): string => {
   if (!dateString) return "N/A"
   

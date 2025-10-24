@@ -1,4 +1,3 @@
-// components/student/student-layout.tsx
 "use client"
 
 import type React from "react"
@@ -10,10 +9,9 @@ interface StudentLayoutProps {
 }
 
 export function StudentLayout({ children, activeTab }: StudentLayoutProps) {
-  // You would typically get the user's name and email from a state management
-  // solution or context, but for this example, we'll use placeholders.
-  const userName = "Student User"
-  const userEmail = "student@example.com"
+  // get the user's name and email from a state management
+  const userName = " "
+  const userEmail = " "
   
   return (
     <div className="flex flex-col min-h-screen">
