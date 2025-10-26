@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Navigation } from "@/components/navigation";
 import {
@@ -50,7 +50,7 @@ type Issue = {
   priority: string;
   location: string;
   isUrgent: boolean;
-  status: "Pending" | "Assigned" | "Resolved" | "Cancelled" | "In Progress";
+  status: "Pending" | "Assigned" | "Resolved" | "Cancelled" | "in-progress";
   reportedAt: string; // currently, we use this, but Firestore has ReportedAt
   reporterEmail: string;
   reporterName: string;
@@ -357,7 +357,8 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
     });
   }  
 
-  const filteredRequests = issues.filter(
+  const filteredRequests = useMemo(() => {
+    return issues.filter(
     r => (selectedStatus === "All" || (r.status || "").toLowerCase().replace("_", " ") === selectedStatus.toLowerCase()) &&
       (
         (r.title?.toLowerCase() ?? "").includes(searchTerm.toLowerCase()) ||
@@ -366,6 +367,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
         (r.location?.toLowerCase() ?? "").includes(searchTerm.toLowerCase())
       )
   );
+  }, [issues, selectedStatus, searchTerm])
   
   const sortedRequests = [...filteredRequests].sort((a, b) => {
     if (sortKey === 'reportedAt') {
@@ -497,7 +499,7 @@ const handleUpdateIssue = async (e?: React.FormEvent) => {
               <SelectItem value="All">All Statuses</SelectItem>
               <SelectItem value="Pending">Pending</SelectItem>
               <SelectItem value="Assigned">Assigned</SelectItem>
-              <SelectItem value="In Progress">In Progress</SelectItem>
+              <SelectItem value="in-progress">In-progress</SelectItem>
               <SelectItem value="Resolved">Resolved</SelectItem>
               <SelectItem value="Cancelled">Cancelled</SelectItem>
             </SelectContent>
