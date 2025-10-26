@@ -9,8 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // === Firebase & Firestore setup ===
 string dir = AppContext.BaseDirectory;
-//string serviceAccountPath = Path.GetFullPath(Path.Combine(dir, @"..\..\..\reshelp-ba48b-firebase-adminsdk-fbsvc-68be648d8b.json"));
-string serviceAccountPath = Path.GetFullPath(Path.Combine(dir, @"..\..\..\reshelp2-firebase-adminsdk-fbsvc-61fc2167c8.json"));
+string serviceAccountPath = Path.GetFullPath(Path.Combine(dir, @"..\..\..\reshelp-ba48b-firebase-adminsdk-fbsvc-35ee96d826.json"));
 
 // Initialize Firebase Admin
 var firebaseApp = FirebaseApp.Create(new AppOptions
