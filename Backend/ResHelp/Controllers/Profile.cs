@@ -205,23 +205,23 @@ public async Task<IActionResult> ForgotPassword([FromBody] UserDto userEmailDto)
 
     try
     {
-        // 1️⃣ Check if user exists in Firestore
+        // Check if user exists in Firestore
         var usersCollection = _firestoreDb.Collection("users");
         var querySnapshot = await usersCollection.WhereEqualTo("Email", userEmailDto.Email).GetSnapshotAsync();
 
         if (querySnapshot.Count == 0)
         {
-            // ✅ User not found, return simple message
+            // User not found, return simple message
             return NotFound(new { message = "User not found." });
         }
 
         var userDoc = querySnapshot.Documents[0];
         string userName = userDoc.GetValue<string>("Name");
 
-        // 2️⃣ Generate temporary password
+        // Generate temporary password
         string tempPassword = GenerateRandomPassword(12);
 
-        // 3️⃣ Update Firebase Auth password
+        // Update Firebase Auth password
         var firebaseUser = await FirebaseAuth.DefaultInstance.GetUserByEmailAsync(userEmailDto.Email);
         await FirebaseAuth.DefaultInstance.UpdateUserAsync(new FirebaseAdmin.Auth.UserRecordArgs
         {
@@ -229,7 +229,7 @@ public async Task<IActionResult> ForgotPassword([FromBody] UserDto userEmailDto)
             Password = tempPassword
         });
 
-        // 4️⃣ Send email with temporary password
+        // Send email with temporary password
         using (var client = new SmtpClient("smtp.gmail.com", 587))
         {
             client.Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos");
@@ -253,7 +253,7 @@ public async Task<IActionResult> ForgotPassword([FromBody] UserDto userEmailDto)
             await client.SendMailAsync(mailMessage);
         }
 
-        // 5️⃣ Return success response
+        // Return success response
         return Ok(new { message = "Temporary password has been sent to your email." });
     }
     catch (FirebaseAuthException fex) when (fex.AuthErrorCode == AuthErrorCode.UserNotFound)

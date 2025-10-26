@@ -27,7 +27,7 @@ namespace ResHelp.Controllers
 
             try
             {
-                // 🔑 Step 1: Check for hardcoded Manager/Admin
+                // Check for hardcoded Manager/Admin
                 if (login.UserType.ToLower() == "manager" || login.UserType.ToLower() == "admin")
                 {
                     const string hardcodedEmail = "admin@reshelp.com";
@@ -47,7 +47,7 @@ namespace ResHelp.Controllers
                     return Unauthorized(new { error = "Incorrect email or password." });
                 }
 
-                // 🔑 Step 2: Normal flow for students/staff
+                // Normal flow for students/staff
                 if (string.IsNullOrEmpty(login.IdToken))
                 {
                     return BadRequest(new { error = "ID Token is required for non-admin users." });

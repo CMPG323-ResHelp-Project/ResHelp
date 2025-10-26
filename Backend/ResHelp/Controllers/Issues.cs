@@ -116,7 +116,7 @@ public async Task<IActionResult> ReportIssue(
         var docRef = _firestoreDb.Collection("issues").Document(issueDoc.Id);
         await docRef.SetAsync(issueDoc);
 
-        // 🆕 Send confirmation email to the reporter
+        // Send confirmation email to the reporter
         using (var client = new SmtpClient("smtp.gmail.com", 587))
         {
             client.Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos"); // ⚠️ move to secrets/config
@@ -254,8 +254,7 @@ public async Task<IActionResult> ReportIssue(
         }
 
 
-                // 🆕 New Endpoint to Update Issue Details
-            // 🆕 Update Issue (only allowed if reported by this user & still Pending)
+            //Update Issue (only allowed if reported by this user & still Pending)
         [HttpPut("{id}")]
         public async Task<IActionResult> UpdateIssue(
             string id,
@@ -286,19 +285,19 @@ public async Task<IActionResult> ReportIssue(
                 string reporterEmail = existingIssue.ContainsKey("ReporterEmail") ? existingIssue["ReporterEmail"]?.ToString() : null;
                 string status = existingIssue.ContainsKey("Status") ? existingIssue["Status"]?.ToString() : null;
 
-                // 1. Check Ownership by UID or Email (just like ReportIssue/GetAllIssues consistency)
+                // Check Ownership by UID or Email (just like ReportIssue/GetAllIssues consistency)
                 if (reportedByUid != uid && reporterEmail != email)
                 {
                     return Forbid();
                 }
 
-                // 2. Check Status (only Pending can be updated)
+                // Check Status (only Pending can be updated)
                 if (status != "Pending")
                 {
                     return BadRequest(new { error = $"Only issues with 'Pending' status can be updated. Current status is '{status}'." });
                 }
 
-                // 3. Prepare Update Map (only user-editable fields)
+                // Prepare Update Map (only user-editable fields)
                 var updates = new Dictionary<string, object>
                 {
                     { "Title", issue.Title },
@@ -311,7 +310,7 @@ public async Task<IActionResult> ReportIssue(
                     { "UpdatedAt", DateTime.UtcNow }
                 };
 
-                // 4. Perform the update
+                // Perform the update
                 await docRef.UpdateAsync(updates);
 
                 return Ok(new { message = "Issue updated successfully.", id = id });
@@ -410,7 +409,7 @@ public async Task<IActionResult> CancelIssue(
         if (reporterEmail != email)
             return Forbid();
 
-        // ✅ Update the status to Cancelled
+        // Update the status to Cancelled
         await docRef.UpdateAsync(new Dictionary<string, object>
         {
             { "Status", "Cancelled" },

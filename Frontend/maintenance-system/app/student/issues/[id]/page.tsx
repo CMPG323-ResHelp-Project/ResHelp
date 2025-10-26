@@ -24,13 +24,14 @@ type Issue = {
   reportedAt: string
   updatedAt: string
   isUrgent: boolean
-  imageUrl?: string
+  // *** RETAINED: Use an array for multiple URLs ***
+  imageUrls: string[]
   location: string
   staffname: string
   staffsurname: string
   staffemail: string
   staffphone: string
-  updates: { // Keep the updates type, but remove the rendering
+  updates: {
     id: string
     message: string
     author: string
@@ -43,13 +44,6 @@ type Issue = {
   studentPhone: string
   studentEmail: string
   rating?: number | null // *** Student rating for the issue ***
-}
-
-type IssueAction = "accept" | "attend" | "resolve";
-
-interface IssueConfirm {
-  issue: Issue;
-  action: IssueAction;
 }
 
 /**
@@ -94,10 +88,21 @@ const getStatusIcon = (status: string) => {
   }
 }
 
+/**
+ * Helper to format timestamps for updates display
+ */
+const formatUpdateTimestamp = (timestamp: string) => {
+  return new Date(timestamp).toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+};
+
 export default function IssueDetails() {
   const [issue, setIssue] = useState<Issue | null>(null)
-  const [isUpdating, setIsUpdating] = useState(false)
-  const [issueToConfirm, setIssueToConfirm] = useState<IssueConfirm | null>(null)
   const router = useRouter()
   const params = useParams()
 
@@ -127,6 +132,16 @@ export default function IssueDetails() {
 
         const data = await res.json()
 
+        // *** FIX: Logic to handle pipe-separated string from data.ImageUrl ***
+        // Use the string from data.ImageUrl (or whichever field contains the pipe-separated data)
+        const rawUrls: string = data.ImageUrl || "";
+
+        const finalImageUrls: string[] = rawUrls
+          .split('|') // Split the single string by the pipe delimiter
+          .map(url => url.trim()) // Trim whitespace from each URL
+          .filter(url => url.length > 0); // Filter out any empty strings
+        // *** END: FIX ***
+
         const normalizedIssue: Issue = {
           id: data.Id,
           title: data.Title,
@@ -137,7 +152,7 @@ export default function IssueDetails() {
           reportedAt: data.ReportedAt,
           updatedAt: data.UpdatedAt,
           isUrgent: data.IsUrgent,
-          imageUrl: data.ImageUrl,
+          imageUrls: finalImageUrls, // *** USE THE CORRECTLY PARSED ARRAY ***
           location: data.Location,
           staffname: data.DriverName,
           staffsurname: data.DriverSurname,
@@ -155,16 +170,13 @@ export default function IssueDetails() {
           studentAddress: data.StudentAddress,
           studentPhone: data.StudentPhone,
           studentEmail: data.StudentEmail,
-          // *** FIX APPLIED: Use API data for rating, if available ***
           rating: data.Rating != null ? parseFloat(data.Rating) : null,
-          // *** END FIX ***
         }
 
         setIssue(normalizedIssue)
       } catch (err: any) {
         console.error("Error fetching issue:", err)
         alert(err.message || "Failed to fetch issue")
-        // Fallback mock data for testing UI if fetch fails
       }
     }
 
@@ -239,8 +251,8 @@ export default function IssueDetails() {
                     <CardTitle className="flex items-center space-x-3 text-2xl font-bold">
                       {getStatusIcon(issue.status)}
                       <h4 className="text-lg font-semibold mb-2 text-gray-700">Title</h4>
-                      </CardTitle>
-                      <p className="text-gray-600 mb-6 border-l-4 border-primary/50 pl-3 italic">{issue.title}</p>
+                    </CardTitle>
+                    <p className="text-gray-600 mb-6 border-l-4 border-primary/50 pl-3 italic">{issue.title}</p>
                     <div className="flex flex-wrap items-center space-x-2 mt-3">
                       <Badge className={getStatusColor(issue.status)}>{issue.status.replace("-", " ")}</Badge>
                       <Badge className={getPriorityColor(issue.priority)}>{issue.priority} priority</Badge>
@@ -250,7 +262,6 @@ export default function IssueDetails() {
                           <span>URGENT</span>
                         </Badge>
                       )}
-                      {/* *** RATING DISPLAY REMOVED FROM HEADER *** */}
                     </div>
                   </div>
                 </div>
@@ -259,24 +270,41 @@ export default function IssueDetails() {
                 <h4 className="text-lg font-semibold mb-2 text-gray-700">Description</h4>
                 <p className="text-gray-600 mb-6 border-l-4 border-primary/50 pl-3 italic">{issue.description}</p>
 
-                {/* Issue Image */}
+                {/* *** MODIFIED: Attachment display with clickable links *** */}
                 <div className="mb-6">
-                  <h4 className="text-lg font-semibold mb-2 text-gray-700">Attachment</h4>
-                  <img
-                    src={issue.imageUrl || "/placeholder.svg"}
-                    alt="Issue photo"
-                    className="w-full max-w-sm rounded-lg shadow-md transition-shadow hover:shadow-xl cursor-pointer"
-                  />
+                  <h4 className="text-lg font-semibold mb-2 text-gray-700">Attachments ({issue.imageUrls.length})</h4>
+                  {issue.imageUrls.length > 0 ? (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                      {issue.imageUrls.map((url, index) => (
+                        <a
+                          key={index}
+                          href={url}
+                          target="_blank" // Opens the link in a new tab
+                          rel="noopener noreferrer" // Security best practice for target="_blank"
+                          className="block"
+                        >
+                          <img
+                            src={url}
+                            alt={`Issue photo ${index + 1}`}
+                            // Added visual cue for clickability
+                            className="w-full h-auto object-cover rounded-lg shadow-md transition-all duration-200 hover:shadow-xl hover:scale-[1.02] cursor-pointer aspect-square"
+                          />
+                        </a>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-gray-500 italic text-sm">No attachments provided.</p>
+                  )}
                 </div>
+                {/* *** END MODIFIED SECTION *** */}
 
-                {/* *** RATING SECTION (MODIFIED FOR APPEALING DISPLAY) *** */}
+                {/* RATING SECTION */}
                 {issue.status === 'resolved' && (
                   <div className="mb-6 p-6 bg-white border border-yellow-300 rounded-xl shadow-lg">
                     <h4 className="text-xl font-bold mb-3 text-yellow-800 flex items-center space-x-2 border-b pb-2 border-yellow-200">
                       <Star className="h-6 w-6 fill-yellow-600 text-yellow-600" />
                       <span>Student Feedback Rating</span>
                     </h4>
-                    {/* MODIFIED: Check for null AND greater than 0 */}
                     {issue.rating != null && issue.rating > 0 ? (
                       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between space-y-3 sm:space-y-0">
                         <div className="flex items-center space-x-4">
@@ -297,7 +325,7 @@ export default function IssueDetails() {
                     )}
                   </div>
                 )}
-                {/* *** END RATING SECTION *** */}
+                {/* END RATING SECTION */}
 
                 <h4 className="text-lg font-semibold mb-3 text-gray-700">Metadata</h4>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-y-3 gap-x-6 text-sm">
@@ -324,6 +352,8 @@ export default function IssueDetails() {
                 </div>
               </CardContent>
             </Card>
+
+            {/* END ISSUE HISTORY / UPDATES CARD */}
           </div>
 
           {/* Right Sidebar */}

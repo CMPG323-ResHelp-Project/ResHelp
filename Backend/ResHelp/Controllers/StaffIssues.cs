@@ -83,9 +83,7 @@ public async Task<IActionResult> GetStaffIssues([FromHeader(Name = "Authorizatio
                 ? doc.GetValue<string>("Status").ToLower()
                 : "pending"; // default to pending if missing
 
-            // Include issue if:
-            // 1) status is pending, OR
-            // 2) driverEmail matches logged-in staff email
+            
             if (status == "pending" || driverEmail == email.ToLower())
             {
                 issues.Add(issueDict);
@@ -113,7 +111,7 @@ public async Task<IActionResult> GetStaffDashboard([FromHeader(Name = "Authoriza
 
     try
     {
-        // 1️⃣ Verify Firebase token
+        // Verify Firebase token
         var idToken = authorization.Replace("Bearer ", "").Trim();
         var decodedToken = await FirebaseAuth.DefaultInstance.VerifyIdTokenAsync(idToken);
         string email = decodedToken.Claims["email"]?.ToString()?.ToLower() ?? "";
@@ -121,7 +119,7 @@ public async Task<IActionResult> GetStaffDashboard([FromHeader(Name = "Authoriza
         if (string.IsNullOrEmpty(email))
             return Unauthorized(new { error = "User email not found in token." });
 
-        // 2️⃣ Fetch staff info
+        // Fetch staff info
         var staffQuery = _firestoreDb.Collection("users").WhereEqualTo("Email", email);
         var staffSnapshot = await staffQuery.GetSnapshotAsync();
         if (staffSnapshot.Count == 0)
@@ -130,11 +128,11 @@ public async Task<IActionResult> GetStaffDashboard([FromHeader(Name = "Authoriza
         var staffDoc = staffSnapshot.Documents[0];
         string maintenanceType = staffDoc.GetValue<string>("MaintenanceType")?.ToLower() ?? "general";
 
-        // 3️⃣ Map maintenance type to categories
+        // Map maintenance type to categories
         if (!MaintenanceCategoryMap.TryGetValue(maintenanceType, out string[] categories))
             categories = new string[] { "general" };
 
-        // 4️⃣ Query Firestore for issues in these categories
+        // Query Firestore for issues in these categories
         var issuesQuery = _firestoreDb.Collection("issues").WhereIn("Category", categories);
         var snapshot = await issuesQuery.GetSnapshotAsync();
 
@@ -186,7 +184,7 @@ public async Task<IActionResult> GetStaffDashboard([FromHeader(Name = "Authoriza
             }
         }
 
-        // 5️⃣ Return structured object for frontend
+        //Return structured object for frontend
         return Ok(new
         {
             dashboardStats = new
@@ -210,6 +208,7 @@ public async Task<IActionResult> GetStaffDashboard([FromHeader(Name = "Authoriza
         return StatusCode(500, new { error = ex.Message });
     }
 }
+
 
 
 [HttpGet("{id}")]

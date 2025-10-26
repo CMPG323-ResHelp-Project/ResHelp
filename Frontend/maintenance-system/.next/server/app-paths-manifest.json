@@ -1,1 +1,17 @@
-{}
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/manager/analytics/page": "app/manager/analytics/page.js",
+  "/manager/issues/page": "app/manager/issues/page.js",
+  "/staff/issues/[id]/page": "app/staff/issues/[id]/page.js",
+  "/manager/staff/page": "app/manager/staff/page.js",
+  "/manager/dashboard/page": "app/manager/dashboard/page.js",
+  "/staff/issues/page": "app/staff/issues/page.js",
+  "/student/dashboard/page": "app/student/dashboard/page.js",
+  "/staff/profile/page": "app/staff/profile/page.js",
+  "/student/issues/[id]/page": "app/student/issues/[id]/page.js",
+  "/student/profile/page": "app/student/profile/page.js",
+  "/manager/students/page": "app/manager/students/page.js",
+  "/staff/dashboard/page": "app/staff/dashboard/page.js",
+  "/page": "app/page.js",
+  "/student/report/page": "app/student/report/page.js"
+}

@@ -23,7 +23,7 @@ namespace ResHelp.Controllers
             _firestoreDb = firestoreDb;
         }
 
-        // 🔐 Secure password generator (if needed)
+        //Secure password generator (if needed)
         private static string GenerateSecurePassword(int length = 12)
         {
             const string validChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
@@ -42,12 +42,12 @@ public async Task<IActionResult> AddStudent([FromBody] UserDto student)
         student.UserType = "student";
     }
 
-    // 1️⃣ Generate temporary password
+    // Generate temporary password
     string generatedPassword = GenerateSecurePassword(12);
 
     try
     {
-        // 2️⃣ Create Firebase user with the generated password
+        // Create Firebase user with the generated password
         var firebaseUser = await FirebaseAuth.DefaultInstance.CreateUserAsync(new UserRecordArgs
         {
             Email = student.Email,
@@ -55,7 +55,7 @@ public async Task<IActionResult> AddStudent([FromBody] UserDto student)
             DisplayName = $"{student.Name} {student.Surname}"
         });
 
-        // 3️⃣ Save student details in Firestore
+        // Save student details in Firestore
         var studentRef = _firestoreDb.Collection("users").Document(firebaseUser.Uid);
         await studentRef.SetAsync(new
         {
@@ -67,10 +67,10 @@ public async Task<IActionResult> AddStudent([FromBody] UserDto student)
             Address = student.Address // frontend should combine res_name, section, room_number
         });
 
-        // 4️⃣ Generate email verification link
+        // Generate email verification link
         var verificationLink = await FirebaseAuth.DefaultInstance.GenerateEmailVerificationLinkAsync(student.Email);
 
-        // 5️⃣ Send email with credentials + verification link
+        // Send email with credentials + verification link
         using (var client = new SmtpClient("smtp.gmail.com", 587))
         {
             client.Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos"); // ⚠️ Use your App Password
@@ -97,7 +97,7 @@ public async Task<IActionResult> AddStudent([FromBody] UserDto student)
             await client.SendMailAsync(mailMessage);
         }
 
-        // 6️⃣ Return success response
+        // Return success response
         return Ok(new
         {
             message = "Student registered successfully. Credentials and verification link sent via email.",
@@ -125,7 +125,7 @@ public async Task<IActionResult> AddStudent([FromBody] UserDto student)
 }
 
 
- // 🎯 Endpoint for updating student details, no authorization
+ //Endpoint for updating student details, no authorization
 [HttpPost("profile")]
 public async Task<IActionResult> UpdateStudent([FromBody] UserDto studentUpdate)
 {

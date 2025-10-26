@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useEffect, useState } from "react"
 import { useRouter } from "next/navigation"
 // 🔑 ADDED: Clock and Image as ImageIcon for loading/success UI
-import { Upload, AlertTriangle, ArrowLeft, Clock, Image as ImageIcon } from "lucide-react"
+import { Upload, AlertTriangle, ArrowLeft, Clock, Image as ImageIcon, XCircle } from "lucide-react"
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { firebase2 } from "@/lib/firebase2";
 // NOTE: Ensure your Firebase auth library is correctly imported here
@@ -31,7 +31,9 @@ export default function ReportIssue() {
   const [isLocationLoading, setIsLocationLoading] = useState(true);
   const [error, setError] = useState<string | null>(null)
   const [message, setMessage] = useState<string | null>(null)
-  const [imageUrl, setImageUrl] = useState<string>(""); // store uploaded image URL
+
+  // 🔑 MODIFIED: Change to an array to store multiple image URLs
+  const [imageUrls, setImageUrls] = useState<string[]>([]); // store uploaded image URLs
 
   // 🔑 EXISTING: State for image uploading
   const [imageUploading, setImageUploading] = useState(false);
@@ -86,7 +88,7 @@ export default function ReportIssue() {
 
     // 🔑 NEW: Prevent submission if image is still uploading
     if (imageUploading) {
-      setError("Please wait for the image upload to complete before submitting.")
+      setError("Please wait for all image uploads to complete before submitting.")
       return
     }
 
@@ -118,7 +120,8 @@ export default function ReportIssue() {
         priority,
         location,
         isUrgent,
-        imageUrl,
+        imageUrl: imageUrls.join("|"), // Join URLs with a pipe for a single string field
+        imageUrls: imageUrls,
         name: firstName,
         surname: lastName,
         reporterEmail: user.email || "unknown@reshelp.com",
@@ -152,30 +155,52 @@ export default function ReportIssue() {
 
   }
 
-  // 🔑 UPDATED: Clear URL and set error on failure
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+  // 🔑 NEW FUNCTION: To remove an image from the list
+  const handleRemoveImage = (urlToRemove: string) => {
+    setImageUrls(prevUrls => prevUrls.filter(url => url !== urlToRemove));
+    setError(null);
+  };
 
-    setImageUrl(""); // Clear previous URL immediately
+  // 🔑 UPDATED: Handle multiple file selection and upload
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+
     setError(null); // Clear previous errors
 
-    if (!file) return;
+    if (!files || files.length === 0) return;
+
+    const filesToUpload = Array.from(files);
+    const totalNewImages = filesToUpload.length;
+
+    // Check limit
+    if (imageUrls.length + totalNewImages > 3) {
+      setError(`You can only upload a maximum of 3 images. You tried to upload ${totalNewImages} new images, but already have ${imageUrls.length}.`);
+      // Reset input to allow selecting again
+      e.target.value = ''; 
+      return;
+    }
 
     try {
       setImageUploading(true); // 🚨 disable submit while uploading
       const { getStorage, ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
       const { firebase2 } = await import("@/lib/firebase2");
-
       const storage = getStorage(firebase2);
-      const storageRef = ref(storage, `issue-images/${file.name}-${Date.now()}`);
-      await uploadBytes(storageRef, file);
-      const url = await getDownloadURL(storageRef);
-      setImageUrl(url);
-      console.log("Image uploaded:", url);
+      
+      const uploadPromises = filesToUpload.map(async (file) => {
+        const storageRef = ref(storage, `issue-images/${file.name}-${Date.now()}`);
+        await uploadBytes(storageRef, file);
+        return getDownloadURL(storageRef);
+      });
+      
+      const newUrls = await Promise.all(uploadPromises);
+      
+      setImageUrls(prevUrls => [...prevUrls, ...newUrls]);
+      console.log("Images uploaded:", newUrls);
     } catch (err) {
       console.error("Image upload failed:", err);
-      setImageUrl(""); // Ensure URL is empty on failure
-      setError("Failed to upload image. Please try again or skip the photo.");
+      // Reset input on failure
+      e.target.value = ''; 
+      setError("Failed to upload one or more images. Please try again.");
     } finally {
       setImageUploading(false);
     }
@@ -183,6 +208,8 @@ export default function ReportIssue() {
 
   // 🔑 NEW: Combined state for disabling the entire form
   const isFormDisabled = isSubmitting || imageUploading || isLocationLoading;
+  // 🔑 NEW: Check if the maximum number of files has been reached
+  const isMaxFiles = imageUrls.length >= 3;
 
 
   return (
@@ -329,43 +356,77 @@ export default function ReportIssue() {
                 />
               </div>
 
-              {/* 🔑 UPDATED: Image Upload Section with Loading State */}
+              {/* 🔑 MODIFIED: Image Upload Section for multiple files */}
               <div className="space-y-2">
-                <Label htmlFor="image">Upload Photo (Optional)</Label>
+                <Label htmlFor="image">Upload Photos (Optional - Max 3)</Label>
                 <div className="border-2 border-dashed border-border rounded-lg p-6 text-center space-y-2">
 
                   {imageUploading ? (
                     // Loading State
                     <div className="flex flex-col items-center">
                       <Clock className="h-8 w-8 animate-spin mx-auto text-blue-500" />
-                      <p className="text-sm text-blue-600 mt-2">Uploading image, please wait...</p>
-                    </div>
-                  ) : imageUrl ? (
-                    // Success State (Image Uploaded)
-                    <div className="flex flex-col items-center">
-                      <ImageIcon className="h-8 w-8 mx-auto mb-2 text-green-500" />
-                      <p className="text-sm font-medium text-green-700">Image successfully attached.</p>
-                      <a href={imageUrl} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-500 hover:underline truncate w-full px-4" title={imageUrl}>View Uploaded Image</a>
+                      <p className="text-sm text-blue-600 mt-2">Uploading image(s), please wait...</p>
                     </div>
                   ) : (
-                    // Initial/No Image State
+                    // Initial/Upload Input State
                     <div className="flex flex-col items-center">
                       <Upload className="h-8 w-8 mx-auto mb-2 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground mb-2">Upload a photo to help illustrate the issue</p>
+                      <p className="text-sm text-muted-foreground mb-2">
+                        {isMaxFiles 
+                          ? "Maximum 3 photos uploaded." 
+                          : `Upload a photo to help illustrate the issue (${imageUrls.length} / 3)`
+                        }
+                      </p>
+                      
+                      <Input
+                        id="image"
+                        type="file"
+                        accept="image/*"
+                        // 🔑 NEW: Allow multiple files
+                        multiple 
+                        onChange={handleImageUpload}
+                        className="max-w-xs mx-auto"
+                        // 🔑 DISABLED: Disable if max files reached or form is disabled
+                        disabled={isFormDisabled || isMaxFiles} 
+                      />
                     </div>
                   )}
-
-                  <Input
-                    id="image"
-                    type="file"
-                    accept="image/*"
-                    onChange={handleImageUpload}
-                    className="max-w-xs mx-auto"
-                    disabled={isFormDisabled} 
-                  />
+                  
+                  {/* 🔑 NEW: Display uploaded images */}
+                  {imageUrls.length > 0 && (
+                    <div className="mt-4 pt-4 border-t border-border flex flex-wrap justify-center gap-4">
+                      {imageUrls.map((url, index) => (
+                        <div key={index} className="relative w-20 h-20 border rounded-md overflow-hidden group">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img 
+                            src={url} 
+                            alt={`Issue image ${index + 1}`} 
+                            className="object-cover w-full h-full"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveImage(url)}
+                            className="absolute top-0 right-0 p-1 bg-white/70 rounded-full hover:bg-white/90 transition-opacity"
+                            aria-label={`Remove image ${index + 1}`}
+                            disabled={isFormDisabled}
+                          >
+                            <XCircle className="h-4 w-4 text-red-500" />
+                          </button>
+                          <a 
+                            href={url} 
+                            target="_blank" 
+                            rel="noopener noreferrer" 
+                            className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center text-white text-xs transition-opacity"
+                          >
+                            View
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
-              {/* END UPDATED Image Upload Section */}
+              {/* END MODIFIED Image Upload Section */}
 
               <div className="flex space-x-4">
                 <Button
@@ -384,7 +445,7 @@ export default function ReportIssue() {
                   className="flex-1"
                 >
                   {/* 🔑 UPDATED: Show appropriate text based on state */}
-                  {imageUploading ? "Waiting for Image..." : isSubmitting ? "Submitting..." : "Submit Issue Report"}
+                  {imageUploading ? "Waiting for Image(s)..." : isSubmitting ? "Submitting..." : "Submit Issue Report"}
                 </Button>
               </div>
             </form>

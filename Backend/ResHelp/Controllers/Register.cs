@@ -23,7 +23,7 @@ namespace ResHelp.Controllers
         {
             try
             {
-                // 1️⃣ Create Firebase user
+                // Create Firebase user
                 var firebaseUser = await FirebaseAuth.DefaultInstance.CreateUserAsync(new UserRecordArgs
                 {
                     Email = user.Email,
@@ -31,7 +31,7 @@ namespace ResHelp.Controllers
                     DisplayName = user.Name
                 });
 
-                // 2️⃣ Store user in Firestore
+                // Store user in Firestore
                 var userRef = _firestoreDb.Collection("users").Document(firebaseUser.Uid);
                 await userRef.SetAsync(new
                 {
@@ -44,10 +44,10 @@ namespace ResHelp.Controllers
                     Address = user.Address
                 });
 
-                // 3️⃣ Generate email verification link
+                // Generate email verification link
                 var verificationLink = await FirebaseAuth.DefaultInstance.GenerateEmailVerificationLinkAsync(user.Email);
 
-                // 4️⃣ Send verification email automatically via Gmail
+                // Send verification email automatically via Gmail
                 using (var client = new SmtpClient("smtp.gmail.com", 587))
                 {
                     client.Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos");

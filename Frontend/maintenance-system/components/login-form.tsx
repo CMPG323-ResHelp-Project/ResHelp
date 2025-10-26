@@ -190,7 +190,7 @@ export function LoginForm({ onViewChange, onForgotPassword }: LoginFormProps) {
                   variant="link"
                   className="p-0 h-auto text-sm"
                   onClick={onForgotPassword} // 🔑 opens Forgot Password view
-                  disabled={isLoading}       // 🔒 disable when signing in
+                  disabled={isLoading}      // 🔒 disable when signing in
                 >
                   Forgot password?
                 </Button>

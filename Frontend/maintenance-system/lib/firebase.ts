@@ -18,6 +18,20 @@ const firebaseConfig = {
   measurementId: "G-D2R1ME3KTC"
 };
 
+/*
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBMDut7COBOMNa9edbfdO1uKo7UMBvHueQ",
+  authDomain: "reshelp2.firebaseapp.com",
+  projectId: "reshelp2",
+  storageBucket: "reshelp2.firebasestorage.app",
+  messagingSenderId: "132832428",
+  appId: "1:132832428:web:02da36805e7e1442acd309",
+  measurementId: "G-10WEP3Q1Y8"
+};
+
+*/
+
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);

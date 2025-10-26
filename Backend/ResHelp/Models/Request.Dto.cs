@@ -2,9 +2,6 @@ namespace ResHelp.Models
 {
     public class RequestDto
     {
-        // 🚨 CRITICAL FIX: Add a public parameterless constructor.
-        // This is necessary for Google.Cloud.Firestore and ASP.NET Core 
-        // to correctly create and populate the object instance.
         public RequestDto() { } 
 
         // Fields sent from the client (page.tsx)

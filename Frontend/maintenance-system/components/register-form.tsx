@@ -27,7 +27,7 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
   const [address, setAddress] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isRegistered, setIsRegistered] = useState(false)
-  const [error, setError] = useState<string | null>(null) // 🔴 central error state
+  const [error, setError] = useState<string | null>(null) 
   const router = useRouter()
 
   const [residenceName, setResidenceName] = useState("")
@@ -160,7 +160,7 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
       <Card className="w-full">
         <CardContent className="pt-6">
           <form onSubmit={handleSubmit} className="space-y-4">
-            {/* 🔴 Show backend error here */}
+            {/* Show backend error here */}
             {error && (
               <Alert className="border-red-200 bg-red-50 text-red-800">
                 <AlertDescription>{error}</AlertDescription>
@@ -221,22 +221,22 @@ export function RegisterForm({ onViewChange }: RegisterFormProps) {
               {/* Right Column */}
               <div className="space-y-4">
               <div className="space-y-2">
-  <Label htmlFor="password">Password</Label>
-  <Input
-    id="password"
-    type="password"
-    placeholder="Create a password"
-    value={password}
-    onChange={(e) => setPassword(e.target.value)}
-    required
-  />
-  {/* Styled password hint like success message */}
-  {password.length < 6 && (
-    <Alert className="border-green-200 bg-green-50 text-green-800 mt-2">
-      <AlertDescription>Password must be at least 6 characters long.</AlertDescription>
-    </Alert>
-  )}
-</div>
+                <Label htmlFor="password">Password</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  placeholder="Create a password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+                {/* Styled password hint like success message */}
+                {password.length < 6 && (
+                  <Alert className="border-green-200 bg-green-50 text-green-800 mt-2">
+                    <AlertDescription>Password must be at least 6 characters long.</AlertDescription>
+                  </Alert>
+                )}
+              </div>
 
                 <div className="space-y-2">
                   <Label htmlFor="confirm-password">Confirm Password</Label>

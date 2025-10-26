@@ -20,8 +20,6 @@ namespace ResHelp.Controllers
             _firestoreDb = firestoreDb;
         }
 
-      // -------------------- Add Issue --------------------
-// -------------------- Add Issue --------------------
 [HttpPost("add")]
 public async Task<IActionResult> AddIssue([FromBody] IssueDto issue)
 {
@@ -30,7 +28,7 @@ public async Task<IActionResult> AddIssue([FromBody] IssueDto issue)
 
     try
     {
-        // --- 1️⃣ Get the user from Firestore ---
+        // Get the user from Firestore 
         var userSnapshot = await _firestoreDb
             .Collection("users")
             .WhereEqualTo("Email", issue.ReporterEmail)
@@ -43,7 +41,7 @@ public async Task<IActionResult> AddIssue([FromBody] IssueDto issue)
         string reporterName = userData.GetValueOrDefault("Name")?.ToString() ?? issue.ReporterEmail;
         string location = userData.GetValueOrDefault("Address")?.ToString() ?? "";
 
-        // --- 2️⃣ Prepare the issue document ---
+        // Prepare the issue document 
         var issueId = Guid.NewGuid().ToString();
         var issueDoc = new Dictionary<string, object>
         {
@@ -66,7 +64,7 @@ public async Task<IActionResult> AddIssue([FromBody] IssueDto issue)
         var docRef = _firestoreDb.Collection("issues").Document(issueId);
         await docRef.SetAsync(issueDoc);
 
-        // --- 3️⃣ Send confirmation email ---
+        // Send confirmation email 
         using var client = new SmtpClient("smtp.gmail.com", 587)
         {
             Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos"),
@@ -121,7 +119,7 @@ public async Task<IActionResult> CheckUserEmail([FromQuery] string email)
 }
 
 
-     // -------------------- Update Issue --------------------
+     //  Update Issue 
 [HttpPut("update/{id}")]
 public async Task<IActionResult> UpdateIssue(string id, [FromBody] IssueDto issue)
 {
@@ -160,7 +158,7 @@ public async Task<IActionResult> UpdateIssue(string id, [FromBody] IssueDto issu
 }
 
 
-        // -------------------- Cancel Issue --------------------
+        // Cancel Issue
 [HttpPut("cancel/{id}")]
 public async Task<IActionResult> CancelIssue(string id)
 {

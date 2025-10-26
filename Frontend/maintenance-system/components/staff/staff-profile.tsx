@@ -56,6 +56,7 @@ export function StaffProfile() {
 
   // State for email update progress (used as Loading state)
   const [isEmailUpdatePending, setIsEmailUpdatePending] = useState(false)
+  
   // State for the post-API-call verification message (6-second delay before logout)
   const [isVerificationStep, setIsVerificationStep] = useState(false)
   const [showEmailConfirmDialog, setShowEmailConfirmDialog] = useState(false);
@@ -242,12 +243,10 @@ export function StaffProfile() {
 
   // Fields are disabled if not editing OR email flow is active OR general saving is in progress
   const isFieldDisabled = !isEditing || isEmailUpdatePending || isVerificationStep || isLoading;
-  // The whole form (opacity/pointer-events) is disabled only during the email update flow
   const isEmailFlowActive = isEmailUpdatePending || isVerificationStep;
 
-
   return (
-    <div className="relative">
+    <div className="relative z-10">
       {/* Overlay stays active and disables all interaction during email update process */}
       {isEmailFlowActive && (
         <div className="fixed inset-0 z-40 bg-white/70" />
@@ -261,7 +260,6 @@ export function StaffProfile() {
           </CardHeader>
           <CardContent>
             <form onSubmit={handleUpdateProfile} className="space-y-4">
-              {/* Disable form elements if email update is pending or verification is needed */}
               <div className={`${isEmailFlowActive ? "pointer-events-none opacity-60" : "pointer-events-auto"}`}>
 
                 {/* ERROR ALERT (for general errors) */}

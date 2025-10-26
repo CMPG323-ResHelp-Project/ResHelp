@@ -23,7 +23,6 @@ const LoadingSpinner = () => (
   </svg>
 );
 
-
 interface UserProfile {
   uid?: string
   name: string
@@ -292,7 +291,7 @@ export function StudentProfile() {
   const isEmailFlowActive = isEmailUpdatePending || isVerificationStep;
 
   return (
-    <div className="relative">
+    <div className="relative z-10">
       {/* Overlay stays active and disables all interaction during email update process */}
       {isEmailFlowActive && ( 
         <div className="fixed inset-0 z-40 bg-white/70" />

@@ -21,7 +21,7 @@ namespace ResHelp.Controllers
             _firestoreDb = firestoreDb;
         }
 
-        // 🔐 Secure password generator
+        //Secure password generator
         private static string GenerateSecurePassword(int length = 12)
         {
             const string validChars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!@#$%^&*";
@@ -39,12 +39,12 @@ namespace ResHelp.Controllers
                 user.UserType = "staff";
             }
 
-            // 1️⃣ Generate temporary password
+            // Generate temporary password
             string generatedPassword = GenerateSecurePassword(12);
 
             try
             {
-                // 2️⃣ Create Firebase user with the generated password
+                // Create Firebase user with the generated password
                 var firebaseUser = await FirebaseAuth.DefaultInstance.CreateUserAsync(new UserRecordArgs
                 {
                     Email = user.Email,
@@ -52,7 +52,7 @@ namespace ResHelp.Controllers
                     DisplayName = $"{user.Name} {user.Surname}"
                 });
 
-                // 3️⃣ Save staff details in Firestore
+                // Save staff details in Firestore
                 var userRef = _firestoreDb.Collection("users").Document(firebaseUser.Uid);
                 await userRef.SetAsync(new
                 {
@@ -65,10 +65,10 @@ namespace ResHelp.Controllers
                     Address = user.Address
                 });
 
-                // 4️⃣ Generate email verification link
+                // Generate email verification link
                 var verificationLink = await FirebaseAuth.DefaultInstance.GenerateEmailVerificationLinkAsync(user.Email);
 
-                // 5️⃣ Send email with credentials + verification link
+                // Send email with credentials + verification link
                 using (var client = new SmtpClient("smtp.gmail.com", 587))
                 {
                     client.Credentials = new NetworkCredential("muhleusurp@gmail.com", "ryxz xaud rpcb xeos"); // ⚠️ Use your App Password
@@ -95,7 +95,7 @@ namespace ResHelp.Controllers
                     await client.SendMailAsync(mailMessage);
                 }
 
-                // 6️⃣ Return success response
+                // Return success response
                 return Ok(new
                 {
                     message = "Staff registered successfully. Credentials and verification link sent via email.",

@@ -63,7 +63,7 @@ export function ForgotPasswordForm({ onViewChange }: ForgotPasswordFormProps) {
     }
   }
   
-  // ✅ Added effect: automatically go back to main page after 3 seconds
+  // automatically go back to main page after 3 seconds
   useEffect(() => {
     if (isSent && onViewChange) {
       const timer = setTimeout(() => onViewChange(), 3000)

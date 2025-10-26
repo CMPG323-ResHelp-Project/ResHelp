@@ -9,7 +9,7 @@ var builder = WebApplication.CreateBuilder(args);
 
 // === Firebase & Firestore setup ===
 string dir = AppContext.BaseDirectory;
-string serviceAccountPath = Path.GetFullPath(Path.Combine(dir, @"..\..\..\reshelp-ba48b-firebase-adminsdk-fbsvc-68be648d8b.json"));
+string serviceAccountPath = Path.GetFullPath(Path.Combine(dir, @"..\..\..\reshelp-ba48b-firebase-adminsdk-fbsvc-35ee96d826.json"));
 
 // Initialize Firebase Admin
 var firebaseApp = FirebaseApp.Create(new AppOptions
@@ -19,7 +19,7 @@ var firebaseApp = FirebaseApp.Create(new AppOptions
 
 // Set environment variable for Firestore SDK
 Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", serviceAccountPath);
-var firestoreDb = FirestoreDb.Create("reshelp-ba48b");
+var firestoreDb = FirestoreDb.Create("reshelp2");
 
 // === Register services ===
 builder.Services.AddSingleton(firestoreDb);

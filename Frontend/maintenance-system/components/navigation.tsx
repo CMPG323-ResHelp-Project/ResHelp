@@ -16,7 +16,6 @@ interface NavigationProps {
   userEmail?: string
 }
 
-// 🌟 UPDATED: Added 'reportIssue'
 type HelpTopic = "default" | "profile" | "manageIssues" | "staffDashboard" | "studentDashboard" | "reportIssue";
 
 export function Navigation({ userType, currentPage, userName, userEmail }: NavigationProps) {
@@ -67,7 +66,7 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
     setIsHelpSidebarOpen(true);
   }
 
-  // 🌟 UPDATED: Added check for Student Dashboard
+  //Added check for Student Dashboard
   const getActiveHelpTopic = (path: string | undefined, role: string): HelpTopic => {
     if (!path) return "default";
     if (role === "student" && path.endsWith("/student/dashboard")) return "studentDashboard";
@@ -84,9 +83,6 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
   }, [currentPage, userType]);
 
 
-  // ------------------------------------------------------------------------------------
-  // ✅ NEW: Help Content for Report Issue Page
-  // ------------------------------------------------------------------------------------
   const getReportIssueHelpContent = () => {
     return (
       <div className="space-y-4">
@@ -103,9 +99,9 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
             Tick the **'This is an urgent safety hazard'** box ONLY for immediate, critical situations.
           </p>
           <ul className="list-disc list-inside text-xs space-y-1 ml-2 text-gray-600">
-            <li>✅ **TICK IF:** Active flood/major leak, exposed live electrical wiring, gas leak smell, no heat in freezing weather, or a broken security lock.</li>
-            <li>❌ **DO NOT TICK IF:** Leaky faucet drip, burnt-out lightbulb, slow drain, or broken non-essential appliance.</li>
-            <li>⚠️ **EMERGENCY:** For fire, major medical, or security breaches, **CALL EMERGENCY SERVICES FIRST** before submitting this form.</li>
+            <li>**TICK IF:** Active flood/major leak, exposed live electrical wiring, gas leak smell, no heat in freezing weather, or a broken security lock.</li>
+            <li>**DO NOT TICK IF:** Leaky faucet drip, burnt-out lightbulb, slow drain, or broken non-essential appliance.</li>
+            <li>⚠️**EMERGENCY:** For fire, major medical, or security breaches, **CALL EMERGENCY SERVICES FIRST** before submitting this form.</li>
           </ul>
         </div>
 
@@ -130,12 +126,6 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
       </div>
     );
   };
-
-
-  // --- Help Content: Student Dashboard ---
-  // ------------------------------------------------------------------------------------
-  // CODE FOR Navigation.tsx - REPLACE the existing getStudentDashboardHelpContent function
-  // ------------------------------------------------------------------------------------
 
   // --- Help Content: Student Dashboard ---
   const getStudentDashboardHelpContent = () => {
@@ -400,8 +390,8 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
     switch (helpTopic) {
       case "studentDashboard":
         return getStudentDashboardHelpContent();
-      case "reportIssue": // ✅ NEW CASE
-        return getReportIssueHelpContent(); // ✅ NEW FUNCTION CALL
+      case "reportIssue": 
+        return getReportIssueHelpContent();
       case "profile":
         return getProfileHelpContent();
       case "manageIssues":
@@ -416,7 +406,8 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
 
   return (
     <>
-      <nav className="bg-card border-b border-border px-4 py-3">
+      {/*'fixed top-0 w-full z-50' to make the navbar sticky */}
+      <nav className="fixed top-0 w-full z-50 bg-card border-b border-border px-4 py-3">
         {/* Navigation Bar Content */}
         <div className="flex items-center justify-between max-w-7xl mx-auto">
           {/* Logo and Main Nav Links (Left side) */}
@@ -484,9 +475,7 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                   <SheetHeader className="p-4">
                     <div className="flex justify-between items-center">
                       <h2 className="text-xl font-bold">Menu</h2>
-                      <Button variant="ghost" className="p-2" onClick={() => setIsSidebarOpen(false)}>
-                        <X className="h-6 w-6" />
-                      </Button>
+                      
                     </div>
                   </SheetHeader>
                   <div className="flex flex-col p-4 space-y-2">
@@ -532,7 +521,7 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                       <HelpCircle className="h-4 w-4" />
                       <span>Help</span>
                     </Button>
-
+  
                     {/* User Info Block (Conditional) */}
                     {(userName || userEmail) && (
                       <div className="border-t border-border mt-4 pt-4">
@@ -540,7 +529,7 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                         {userEmail && <div className="text-sm text-gray-500 truncate">{userEmail}</div>}
                       </div>
                     )}
-
+  
                     {/* Logout Button (Always Present) */}
                     <div className={`${!(userName || userEmail) ? "border-t border-border mt-4 pt-4" : "mt-2"}`}>
                       <Button
@@ -562,11 +551,13 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
           </div>
         </div>
       </nav>
-
-      {/* --- DEDICATED HELP/SUPPORT SHEET (DYNAMIC) --- */}
+  
+      {/*NEW: Spacer to offset fixed navbar height */}
+      <div className="h-16" />
+  
       {/* --- DEDICATED HELP/SUPPORT SHEET (DYNAMIC) --- */}
       <Sheet open={isHelpSidebarOpen} onOpenChange={setIsHelpSidebarOpen}>
-        <SheetContent side="right" className="w-full sm:max-w-md">
+        <SheetContent side="right" className="w-full sm:max-w-md pt-16">
           <SheetHeader>
             <SheetTitle className="flex items-center space-x-2">
               <BookOpen className="h-5 w-5" />
@@ -575,30 +566,30 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                   helpTopic === "manageIssues" ? "Staff Issues Guide" :
                     helpTopic === "staffDashboard" ? "Staff Dashboard Guide" :
                       helpTopic === "studentDashboard" ? "Student Dashboard Guide" :
-                        helpTopic === "reportIssue" ? "Issue Reporting Guide" : // ✅ NEW TITLE
+                        helpTopic === "reportIssue" ? "Issue Reporting Guide" :
                           "In-App Help Menu"}
               </span>
             </SheetTitle>
           </SheetHeader>
-          {/* ✅ SCROLLBAR FIX HERE: */}
-          <div className="h-full overflow-y-auto p-4 space-y-4">
-
+          {/*SCROLLBAR FIX HERE: */}
+          <div className="h-full overflow-y-auto p-4 space-y-4 mt-4">
+  
             {/* Default/Initial Help Menu */}
             {helpTopic === "default" && (
               <>
                 {/* Fixed Footer Content (Shown only when viewing a specific topic) */}
-            {(helpTopic !== "default") && (
-              <div className="border-t pt-4 space-y-2"></div>
-            )}
-
+                {(helpTopic !== "default") && (
+                  <div className="border-t pt-4 space-y-2"></div>
+                )}
+  
                 <h3 className="text-lg font-bold text-primary">Need assistance?</h3>
                 <p className="text-sm text-muted-foreground">
                   Select a topic below for contextual information on a specific page.
                 </p>
-
+  
                 <div className="border-t pt-4 space-y-2">
                   <h4 className="font-medium">Quick Guides</h4>
-
+  
                   {/* Dashboard Button (Staff Only) */}
                   {userType === "staff" && (
                     <Button
@@ -610,20 +601,20 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                       Staff Dashboard Overview
                     </Button>
                   )}
-
+  
                   {/* 🌟 NEW: Report Issue Button (Student Only) */}
                   {userType === "student" && (
                     <Button
                       variant="outline"
                       className="w-full justify-start"
-                      onClick={() => setHelpTopic("reportIssue")} // ✅ NEW CLICK HANDLER
+                      onClick={() => setHelpTopic("reportIssue")} 
                     >
                       <Plus className="h-4 w-4 mr-2 text-red-500" />
                       Reporting Issues & Hazard Guide
                     </Button>
                   )}
-
-                  {/* 🌟 NEW: Dashboard Button (Student Only) */}
+  
+                  {/*NEW: Dashboard Button (Student Only) */}
                   {userType === "student" && (
                     <Button
                       variant="outline"
@@ -634,7 +625,7 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                       Student Dashboard & Issue Tracking
                     </Button>
                   )}
-
+  
                   {/* Profile Button */}
                   {userType !== "manager" && (
                     <Button
@@ -646,7 +637,7 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                       How to Edit Your Profile & Security
                     </Button>
                   )}
-
+  
                   {/* Manage Issues Button (Staff/Manager) */}
                   {userType === "staff" && (
                     <Button
@@ -671,11 +662,11 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                       View All Issues (Manager)
                     </Button>
                   )}
-
+  
                 </div>
               </>
             )}
-
+  
             {/* Dynamic Help Content */}
             {(helpTopic !== "default") && (
               <>
@@ -687,10 +678,10 @@ export function Navigation({ userType, currentPage, userName, userEmail }: Navig
                 </Button>
               </>
             )}
-
+  
           </div>
         </SheetContent>
       </Sheet>
     </>
   )
-}
+}  
