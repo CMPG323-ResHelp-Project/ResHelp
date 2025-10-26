@@ -19,7 +19,7 @@ var firebaseApp = FirebaseApp.Create(new AppOptions
 
 // Set environment variable for Firestore SDK
 Environment.SetEnvironmentVariable("GOOGLE_APPLICATION_CREDENTIALS", serviceAccountPath);
-var firestoreDb = FirestoreDb.Create("reshelp2");
+var firestoreDb = FirestoreDb.Create("reshelp-ba48b");
 
 // === Register services ===
 builder.Services.AddSingleton(firestoreDb);
