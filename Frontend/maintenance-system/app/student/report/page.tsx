@@ -14,7 +14,11 @@ import { useRouter } from "next/navigation"
 // 🔑 ADDED: Clock and Image as ImageIcon for loading/success UI
 import { Upload, AlertTriangle, ArrowLeft, Clock, Image as ImageIcon, XCircle } from "lucide-react"
 import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
+
+//IMPORT THIIS LInE
 import { firebase2 } from "@/lib/firebase2";
+//IMPORT THIIS LInE
+
 // NOTE: Ensure your Firebase auth library is correctly imported here
 // import { auth } from "@/lib/firebase" 
 
@@ -161,6 +165,10 @@ export default function ReportIssue() {
     setError(null);
   };
 
+
+
+  
+//USE THIS CODE FOR THE IMAGE BUT WITH YOUR COMPONENTS
   // 🔑 UPDATED: Handle multiple file selection and upload
   const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -205,6 +213,11 @@ export default function ReportIssue() {
       setImageUploading(false);
     }
   };
+//USE THIS CODE FOR THE IMAGE BUT WITH YOUR COMPONENTS
+
+
+
+  
 
   // 🔑 NEW: Combined state for disabling the entire form
   const isFormDisabled = isSubmitting || imageUploading || isLocationLoading;
